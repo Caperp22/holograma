@@ -1,0 +1,245 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<title>Holograma con las manos</title>
+<link href="https://fonts.googleapis.com/css2?family=Rajdhani:wght@500;700&display=swap" rel="stylesheet">
+<style>
+/* VOICE: laboratorio de taller, técnico y luminoso
+   IDEA: mesa de proyección holográfica
+   PICTURE: el holograma cian flotando sobre tu propia cámara
+   COLOUR and TYPE: negro azulado, cian brillante; Rajdhani
+   LAYOUT: pantalla completa, HUD arriba, controles abajo */
+:root{--c:#37e8ff;--bg:#02070b}
+*{box-sizing:border-box;min-width:0}
+html,body{margin:0;height:100%;background:var(--bg);color:#d8fbff;font:16px/1.4 Rajdhani,system-ui,sans-serif;overflow:hidden;touch-action:none}
+#stage{position:fixed;inset:0}
+video{position:absolute;inset:0;width:100%;height:100%;object-fit:cover;opacity:.35;filter:saturate(.3) brightness(.85)}
+video.mirror{transform:scaleX(-1)}
+canvas{position:absolute;inset:0;width:100%;height:100%}
+#scan{position:absolute;inset:0;pointer-events:none;background:repeating-linear-gradient(0deg,rgba(55,232,255,.05) 0 1px,transparent 1px 4px)}
+.pyr video,.pyr #hands,.pyr #scan{display:none}
+#hud{position:absolute;left:0;right:0;top:0;padding:max(12px,env(safe-area-inset-top)) 14px 0;display:flex;justify-content:center;pointer-events:none}
+#status{font-size:18px;font-weight:700;text-align:center;text-shadow:0 0 8px var(--c);background:rgba(2,20,28,.55);padding:6px 14px;border-radius:10px}
+#bottom{position:absolute;left:0;right:0;bottom:0;padding:0 14px max(14px,env(safe-area-inset-bottom));display:flex;gap:8px;flex-wrap:wrap;justify-content:center}
+button{font:inherit;font-weight:700;color:var(--c);background:rgba(2,20,28,.75);border:1px solid var(--c);border-radius:10px;min-height:44px;padding:0 14px;cursor:pointer}
+button:focus-visible{outline:2px solid #fff;outline-offset:2px}
+button:disabled{opacity:.5}
+#intro{position:absolute;inset:0;display:grid;place-items:center;padding:24px;background:radial-gradient(circle at 50% 35%,rgba(6,48,58,.92),rgba(2,7,11,.97) 70%);z-index:5;overflow:auto}
+#intro .box{max-width:440px}
+#intro h1{font-size:40px;line-height:1.05;margin:0 0 10px;color:var(--c);text-shadow:0 0 16px var(--c);text-wrap:balance}
+#intro ul{padding-left:20px;margin:14px 0 22px}
+#intro li{margin:6px 0}
+#intro .go{font-size:20px;padding:0 28px;min-height:54px;width:100%}
+#err{color:#ff9a9a;margin-top:14px}
+.hide{display:none!important}
+@media (prefers-reduced-motion:reduce){#scan{display:none}}
+</style>
+</head>
+<body>
+<div id="stage">
+  <video id="video" class="mirror" playsinline muted></video>
+  <canvas id="gl"></canvas>
+  <canvas id="hands"></canvas>
+  <div id="scan"></div>
+  <div id="hud"><div id="status">Listo</div></div>
+  <div id="bottom">
+    <button id="next">Objeto: Núcleo</button>
+    <button id="pyr">Modo pirámide</button>
+    <button id="flip">Cambiar cámara</button>
+    <button id="reset">Centrar</button>
+  </div>
+  <div id="intro">
+    <div class="box">
+      <h1>Holograma con tus manos</h1>
+      <div>Apoya el celular para tener las dos manos libres y ponte a unos 40–60 cm de la cámara.</div>
+      <ul>
+        <li><b>Pellizca</b> (pulgar + índice) para agarrar el objeto y moverlo.</li>
+        <li><b>Cierra el puño</b> y muévelo para girarlo.</li>
+        <li><b>Pellizca con las dos manos</b>: sepáralas para agrandar, júntalas para achicar y gíralas como un volante.</li>
+        <li><b>Modo pirámide</b>: 4 vistas para poner una pirámide de acrílico encima (Pepper's ghost).</li>
+      </ul>
+      <button class="go" id="start">Activar cámara</button>
+      <div id="err" class="hide"></div>
+    </div>
+  </div>
+</div>
+
+<script type="module">
+import * as THREE from 'https://cdn.jsdelivr.net/npm/three@0.160.0/build/three.module.js';
+import {FilesetResolver, HandLandmarker} from 'https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@0.10.14/vision_bundle.mjs';
+
+const WASM='https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@0.10.14/wasm';
+const MODEL='https://storage.googleapis.com/mediapipe-models/hand_landmarker/hand_landmarker/float16/1/hand_landmarker.task';
+const $=id=>document.getElementById(id);
+const video=$('video'),stage=$('stage'),hc=$('hands'),ctx=hc.getContext('2d');
+
+/* ---------- Escena 3D ---------- */
+const renderer=new THREE.WebGLRenderer({canvas:$('gl'),antialias:true,alpha:true});
+renderer.setPixelRatio(Math.min(devicePixelRatio,2));
+const scene=new THREE.Scene();
+const cam=new THREE.PerspectiveCamera(50,1,.1,100);
+const D=6, C=0x37e8ff;
+const mat=o=>new THREE.MeshBasicMaterial({color:C,wireframe:true,transparent:true,opacity:o,blending:THREE.AdditiveBlending,depthWrite:false});
+function glow(geo){const g=new THREE.Group();g.add(new THREE.Mesh(geo,mat(.8)));const h=new THREE.Mesh(geo,mat(.16));h.scale.setScalar(1.07);g.add(h);return g}
+const makers={
+  'Núcleo':()=>{const g=glow(new THREE.IcosahedronGeometry(1.1,1));g.add(new THREE.Points(new THREE.SphereGeometry(.55,16,12),new THREE.PointsMaterial({color:C,size:.05,transparent:true,blending:THREE.AdditiveBlending})));return g},
+  'Nudo':()=>glow(new THREE.TorusKnotGeometry(.8,.25,90,10)),
+  'Reactor':()=>{const g=new THREE.Group();g.add(glow(new THREE.TorusGeometry(1.1,.12,10,48)));g.add(new THREE.Mesh(new THREE.CircleGeometry(.45,24),mat(.5)));
+    for(let i=0;i<10;i++){const b=new THREE.Mesh(new THREE.BoxGeometry(.18,.42,.12),mat(.7));const a=i/10*Math.PI*2;b.position.set(Math.cos(a)*.78,Math.sin(a)*.78,0);b.rotation.z=a+Math.PI/2;g.add(b)}return g},
+  'Planeta':()=>{const g=glow(new THREE.SphereGeometry(.9,18,12));const r=new THREE.Mesh(new THREE.RingGeometry(1.25,1.6,48,1),mat(.45));r.rotation.x=Math.PI/2.3;g.add(r);return g},
+  'Cubo':()=>{const g=glow(new THREE.BoxGeometry(1.4,1.4,1.4,3,3,3));g.add(new THREE.Mesh(new THREE.OctahedronGeometry(.55),mat(.6)));return g}
+};
+const names=Object.keys(makers);
+const holder=new THREE.Group();scene.add(holder);
+let obj=null,idx=0;
+function setObj(i){
+  if(obj){holder.remove(obj);obj.traverse(o=>{if(o.geometry)o.geometry.dispose()})}
+  idx=(i+names.length)%names.length;obj=makers[names[idx]]();holder.add(obj);
+  $('next').textContent='Objeto: '+names[idx];
+}
+setObj(0);
+
+/* ---------- Estado ---------- */
+const tp=new THREE.Vector3();const tr={x:.3,y:0,z:0};let ts=1,vx=0,vy=0;
+let pyr=false,mirror=true,facing='user',lm=null,ready=false,stream=null,statusTxt='';
+let two=null,fistPrev=null,noHands=0;const pinchState={};
+
+function setStatus(t){if(t!==statusTxt){statusTxt=t;$('status').textContent=t}}
+const clamp=(v,a,b)=>Math.max(a,Math.min(b,v));
+function wrap(a){while(a>Math.PI)a-=2*Math.PI;while(a<-Math.PI)a+=2*Math.PI;return a}
+
+function size(){
+  const W=innerWidth,H=innerHeight,r=Math.min(devicePixelRatio,2);
+  renderer.setSize(W,H,false);hc.width=W*r;hc.height=H*r;ctx.setTransform(r,0,0,r,0,0);
+}
+addEventListener('resize',size);size();
+
+/* Coordenadas: landmark normalizado -> píxeles de pantalla (respeta object-fit:cover y espejo) */
+function toScreen(p){
+  const vw=video.videoWidth||640,vh=video.videoHeight||480,W=innerWidth,H=innerHeight;
+  const k=Math.max(W/vw,H/vh);
+  let x=p.x*vw*k-(vw*k-W)/2,y=p.y*vh*k-(vh*k-H)/2;
+  if(mirror)x=W-x;return{x,y};
+}
+function world(x,y){
+  const h=2*D*Math.tan(THREE.MathUtils.degToRad(25)),w=h*innerWidth/innerHeight;
+  return{x:(x/innerWidth-.5)*w,y:(.5-y/innerHeight)*h};
+}
+const dist=(a,b)=>Math.hypot(a.x-b.x,a.y-b.y);
+
+function analyze(l,key){
+  const s=l.map(toScreen);const hand=dist(s[0],s[9])||1;
+  const pr=dist(s[4],s[8])/hand;
+  const was=pinchState[key];const pinch=was?pr<.55:pr<.32;pinchState[key]=pinch;
+  const curl=[8,12,16,20].reduce((a,i)=>a+dist(s[i],s[0]),0)/4/hand;
+  return{s,pinch,fist:!pinch&&curl<1.25,p:{x:(s[4].x+s[8].x)/2,y:(s[4].y+s[8].y)/2},c:s[9]};
+}
+
+function drawHands(hs){
+  ctx.clearRect(0,0,innerWidth,innerHeight);
+  for(const h of hs){
+    ctx.strokeStyle='rgba(55,232,255,.55)';ctx.lineWidth=2;ctx.beginPath();
+    for(const {start,end} of HandLandmarker.HAND_CONNECTIONS){ctx.moveTo(h.s[start].x,h.s[start].y);ctx.lineTo(h.s[end].x,h.s[end].y)}
+    ctx.stroke();ctx.fillStyle='#37e8ff';
+    for(const q of h.s){ctx.beginPath();ctx.arc(q.x,q.y,3,0,7);ctx.fill()}
+    ctx.beginPath();ctx.arc(h.p.x,h.p.y,h.pinch?16:10,0,7);
+    ctx.strokeStyle=h.pinch?'#fff':'rgba(55,232,255,.8)';ctx.lineWidth=h.pinch?3:1.5;ctx.stroke();
+    if(h.fist){ctx.beginPath();ctx.arc(h.c.x,h.c.y,26,0,7);ctx.strokeStyle='#ffd23f';ctx.lineWidth=3;ctx.stroke()}
+  }
+}
+
+function update(res){
+  const seen=new Set();const hs=[];
+  res.landmarks.forEach((l,i)=>{const k=res.handedness?.[i]?.[0]?.categoryName||String(i);seen.add(k);hs.push(analyze(l,k))});
+  for(const k in pinchState)if(!seen.has(k))delete pinchState[k];
+  drawHands(hs);
+  noHands=hs.length?0:noHands+1;
+  const P=hs.filter(h=>h.pinch);
+  if(P.length>=2){
+    const a=P[0].p,b=P[1].p,d=dist(a,b),ang=Math.atan2(b.y-a.y,b.x-a.x);
+    if(!two)two={d0:Math.max(d,1),a0:ang,s0:ts,r0:tr.z};
+    ts=clamp(two.s0*d/two.d0,.3,3.5);tr.z=two.r0-wrap(ang-two.a0);
+    const m=world((a.x+b.x)/2,(a.y+b.y)/2);tp.x=m.x;tp.y=m.y;fistPrev=null;
+    setStatus('Escalando y girando · '+ts.toFixed(1)+'×');return;
+  }
+  two=null;
+  if(P.length===1){const w=world(P[0].p.x,P[0].p.y);tp.x=w.x;tp.y=w.y;fistPrev=null;setStatus('Agarrado');return}
+  const F=hs.find(h=>h.fist);
+  if(F){
+    if(fistPrev){vy=(F.c.x-fistPrev.x)/innerWidth*7;vx=(F.c.y-fistPrev.y)/innerHeight*7;tr.y+=vy;tr.x+=vx}
+    fistPrev=F.c;setStatus('Girando');return;
+  }
+  fistPrev=null;
+  setStatus(hs.length?'Pellizca para agarrar · puño para girar':'Muestra tu mano a la cámara');
+}
+
+/* ---------- Render ---------- */
+function render(){
+  const W=innerWidth,H=innerHeight;
+  if(!pyr){
+    renderer.setScissorTest(false);renderer.setViewport(0,0,W,H);renderer.setClearColor(0,0);
+    cam.aspect=W/H;cam.updateProjectionMatrix();cam.up.set(0,1,0);cam.position.set(0,0,D);cam.lookAt(0,0,0);
+    renderer.render(scene,cam);return;
+  }
+  renderer.setClearColor(0,1);renderer.setScissorTest(true);
+  renderer.setViewport(0,0,W,H);renderer.setScissor(0,0,W,H);renderer.clear();
+  const s=Math.floor(Math.min(W,H)/3),cx=W/2,cy=H/2,c=holder.position;
+  const views=[[cx-s/2,cy+s/2,0,0],[cx+s/2,cy-s/2,Math.PI/2,-Math.PI/2],[cx-s/2,cy-1.5*s,Math.PI,Math.PI],[cx-1.5*s,cy-s/2,-Math.PI/2,Math.PI/2]];
+  cam.aspect=1;cam.updateProjectionMatrix();
+  for(const [x,y,a,rz] of views){
+    renderer.setViewport(x,y,s,s);renderer.setScissor(x,y,s,s);
+    cam.up.set(0,1,0);cam.position.set(c.x+Math.sin(a)*D,c.y,c.z+Math.cos(a)*D);cam.lookAt(c);cam.rotateZ(rz);
+    renderer.render(scene,cam);
+  }
+}
+
+let lastT=-1;
+function loop(){
+  requestAnimationFrame(loop);
+  if(ready&&video.readyState>=2&&video.currentTime!==lastT){
+    lastT=video.currentTime;
+    try{update(lm.detectForVideo(video,performance.now()))}catch(e){console.log(e)}
+  }
+  if(!fistPrev){vx*=.94;vy*=.94;tr.x+=vx*.3;tr.y+=vy*.3}
+  if(!ready||noHands>20)tr.y+=.006;
+  holder.position.lerp(tp,.25);
+  holder.scale.setScalar(holder.scale.x+(ts-holder.scale.x)*.2);
+  holder.rotation.x+=(tr.x-holder.rotation.x)*.2;
+  holder.rotation.y+=(tr.y-holder.rotation.y)*.2;
+  holder.rotation.z+=(tr.z-holder.rotation.z)*.2;
+  if(obj)obj.rotation.y+=.002;
+  render();
+}
+loop();
+
+/* ---------- Cámara ---------- */
+function fail(t){$('err').textContent=t;$('err').classList.remove('hide');$('start').disabled=false;$('start').textContent='Reintentar'}
+async function openCam(){
+  if(stream)stream.getTracks().forEach(t=>t.stop());
+  stream=await navigator.mediaDevices.getUserMedia({video:{facingMode:facing,width:{ideal:640},height:{ideal:480}},audio:false});
+  video.srcObject=stream;await video.play();
+  mirror=facing==='user';video.classList.toggle('mirror',mirror);
+}
+async function start(){
+  $('start').disabled=true;$('start').textContent='Cargando…';$('err').classList.add('hide');
+  if(!navigator.mediaDevices?.getUserMedia){fail('El navegador no deja usar la cámara aquí. Abre la página desde una dirección https:// en Chrome o Safari.');return}
+  try{await openCam()}catch(e){fail('No pude abrir la cámara ('+e.name+'). Revisa que diste permiso y que la página está en https://.');return}
+  try{
+    if(!lm){
+      const fs=await FilesetResolver.forVisionTasks(WASM);
+      const opts=d=>({baseOptions:{modelAssetPath:MODEL,delegate:d},runningMode:'VIDEO',numHands:2});
+      try{lm=await HandLandmarker.createFromOptions(fs,opts('GPU'))}catch(e){lm=await HandLandmarker.createFromOptions(fs,opts('CPU'))}
+    }
+  }catch(e){fail('No pude cargar el modelo de manos. Revisa tu conexión a internet.');return}
+  $('intro').classList.add('hide');ready=true;
+}
+$('start').onclick=start;
+$('next').onclick=()=>setObj(idx+1);
+$('pyr').onclick=()=>{pyr=!pyr;stage.classList.toggle('pyr',pyr);$('pyr').textContent=pyr?'Modo normal':'Modo pirámide'};
+$('flip').onclick=async()=>{facing=facing==='user'?'environment':'user';try{await openCam()}catch(e){facing=facing==='user'?'environment':'user'}};
+$('reset').onclick=()=>{tp.set(0,0,0);ts=1;tr.x=.3;tr.y=0;tr.z=0;vx=vy=0};
+</script>
+</body>
+</html>
