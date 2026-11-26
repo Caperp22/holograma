@@ -134,9 +134,10 @@ const dist=(a,b)=>Math.hypot(a.x-b.x,a.y-b.y);
 function analyze(l,key){
   const s=l.map(toScreen);const hand=dist(s[0],s[9])||1;
   const pr=dist(s[4],s[8])/hand;
-  const was=pinchState[key];const pinch=was?pr<.55:pr<.32;pinchState[key]=pinch;
+  const P={x:(s[0].x+s[5].x+s[9].x+s[13].x+s[17].x)/5,y:(s[0].y+s[5].y+s[9].y+s[13].y+s[17].y)/5},fl=dist(s[8],P)/hand<.85&&dist(s[12],P)/hand<.85;
+  const was=pinchState[key];const pinch=!fl&&(was?pr<.55:pr<.32);pinchState[key]=pinch;
   const curl=[8,12,16,20].reduce((a,i)=>a+dist(s[i],s[0]),0)/4/hand;
-  return{s,pinch,fist:!pinch&&curl<1.25,p:{x:(s[4].x+s[8].x)/2,y:(s[4].y+s[8].y)/2},c:s[9]};
+  return{s,pinch,fist:fl||(!pinch&&curl<1.25),p:{x:(s[4].x+s[8].x)/2,y:(s[4].y+s[8].y)/2},c:s[9]};
 }
 
 function drawHands(hs){

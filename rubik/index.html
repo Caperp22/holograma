@@ -342,10 +342,14 @@ let pinchCfg={on:.33,off:.52};try{const v=JSON.parse(localStorage.getItem('holo-
 const pinchState={},smooth={};
 function toScreen(p){const vw=video.videoWidth||640,vh=video.videoHeight||480,W=innerWidth,H=innerHeight,k=Math.max(W/vw,H/vh);return{x:W-(p.x*vw*k-(vw*k-W)/2),y:p.y*vh*k-(vh*k-H)/2}}
 const dist=(a,b)=>Math.hypot(a.x-b.x,a.y-b.y);
+const palmC=s=>({x:(s[0].x+s[5].x+s[9].x+s[13].x+s[17].x)/5,y:(s[0].y+s[5].y+s[9].y+s[13].y+s[17].y)/5});
+// puño: las puntas del índice y del medio quedan dentro de la palma (en un pellizco el índice queda afuera)
+const fistLike=(s,hs)=>{const P=palmC(s);return dist(s[8],P)/hs<.85&&dist(s[12],P)/hs<.85};
+
 function readHands(res){const seen=new Set();
   hands=res.landmarks.map((l,i)=>{const k='h'+(res.handedness?.[i]?.[0]?.categoryName||i);seen.add(k);
     const s=l.map(toScreen),hs=dist(s[0],s[9])||1,ratio=dist(s[4],s[8])/hs;
-    const was=pinchState[k],pinch=was?ratio<pinchCfg.off:ratio<pinchCfg.on;pinchState[k]=pinch;if(pinch&&!was)delete smooth[k];
+    const fl=fistLike(s,hs),was=pinchState[k],pinch=!fl&&(was?ratio<pinchCfg.off:ratio<pinchCfg.on);pinchState[k]=pinch;if(pinch&&!was)delete smooth[k];
     const raw={x:(s[4].x+s[8].x)/2,y:(s[4].y+s[8].y)/2},sm=smooth[k]=smooth[k]?{x:smooth[k].x*.5+raw.x*.5,y:smooth[k].y*.5+raw.y*.5}:raw;
     return{k,s,tip:s[8],pinch,pp:sm,ratio,hs,pose:stablePose(k,poseOf(k,s,hs,pinch))}});
   for(const k of Object.keys(pinchState))if(!seen.has(k)){delete pinchState[k];delete smooth[k];dragEnd(k)}
@@ -353,9 +357,9 @@ function readHands(res){const seen=new Set();
   gestures(performance.now())}
 // dedos estirados con histéresis: no cambian de estado por un temblor
 const fingers={};
-function poseOf(k,s,hs,pinch){if(pinch)return'pinch';
+function poseOf(k,s,hs,pinch){if(pinch)return'pinch';if(fistLike(s,hs)){const st=fingers[k]=fingers[k]||{};st[8]=st[12]=st[16]=st[20]=false;const thumbUp=dist(s[4],s[9])>hs*.7&&s[4].y<s[3].y&&s[3].y<s[2].y&&s[4].y<s[6].y-hs*.15;return thumbUp?'thumb':'fist'}
   const st=fingers[k]=fingers[k]||{};
-  const ext=j=>{const r=dist(s[j],s[0])/(dist(s[j-2],s[0])||1);if(r>1.2)st[j]=true;else if(r<1.03)st[j]=false;return!!st[j]};
+  const ext=j=>{const r=dist(s[j],palmC(s))/hs;if(r>1.15)st[j]=true;else if(r<.9)st[j]=false;return!!st[j]};
   const i=ext(8),m=ext(12),r=ext(16),p=ext(20);
   const thumbUp=dist(s[4],s[9])>hs*.7&&s[4].y<s[3].y&&s[3].y<s[2].y&&s[4].y<s[6].y-hs*.15;
   if(i&&m&&r&&p)return'open';if(i&&!m&&!r&&!p)return'point';if(i&&m&&!r&&!p)return'victory';

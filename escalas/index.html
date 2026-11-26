@@ -52,7 +52,7 @@ button.on{background:rgba(55,232,255,.25)}
   <div id="title">Viaje de escalas</div>
   <button id="bAuto">Viaje automático</button>
 </div>
-<div id="scale"><div id="sExp"></div><div id="sLen"></div></div>
+<div id="scale"><div id="sExp"></div><div id="sLen"></div><div id="sEnd" style="font-weight:700;color:#ffd23f;font-size:15px;min-height:20px"></div></div>
 <div id="track"><canvas id="tr"></canvas></div>
 <div id="panel">
   <div id="info"><div id="iName"></div><div id="iSize"></div><div id="iFact"></div></div>
@@ -250,6 +250,7 @@ function render(t){
   const rw=base*.3,rx=cx-rw/2,ry=Math.min(bot-18,cy+base*.5+4);ctx.strokeStyle=Y;ctx.lineWidth=2;ctx.beginPath();ctx.moveTo(rx,ry-5);ctx.lineTo(rx,ry);ctx.lineTo(rx+rw,ry);ctx.lineTo(rx+rw,ry-5);ctx.stroke();
   const fw=Math.pow(10,z)*(rw/base);label(fmtLen(fw),cx,ry-12,13,Y);
   // textos
+  const endTxt=z<=L[0].z+.05?'◆ Llegaste a lo más pequeño de este viaje':z>=L[L.length-1].z-.05?'◆ Llegaste a lo más grande que podemos ver':'';if($('sEnd').textContent!==endTxt)$('sEnd').textContent=endTxt;
   const e=Math.round(z);$('sExp').textContent='Ancho de la vista ≈ '+expTxt(e);$('sLen').textContent=fmtLen(Math.pow(10,z));
   const n=nearest();if(n!==lastLevel){lastLevel=n;$('iName').textContent=L[n].name;$('iSize').textContent='Ancho de esta vista: unos '+fmtLen(Math.pow(10,L[n].z));$('iFact').textContent=L[n].fact+(L[n].photo?' · '+L[n].photo.credit+'.':'');const go={'Ciudad':'colombia','Colombia':'colombia','La Tierra':'tierra','La Tierra y la Luna':'luna','Sistema solar':'sistema'}[L[n].name];$('bEnter').classList.toggle('hide',!go);$('bEnter').onclick=()=>{location.href='../explorar/#'+go}}
   $('info').style.opacity=Math.abs(L[n].z-z)<.8?1:.55;
@@ -279,11 +280,15 @@ let pinchCfg={on:.33,off:.52};try{const v=JSON.parse(localStorage.getItem('holo-
 const pinchState={},prevPinch={};let open0=null;
 function toScreen(p){const k=Math.max(VW/(video.videoWidth||640),VH/(video.videoHeight||480)),vw=video.videoWidth||640,vh=video.videoHeight||480;return{x:VW-(p.x*vw*k-(vw*k-VW)/2),y:p.y*vh*k-(vh*k-VH)/2}}
 const dist=(a,b)=>Math.hypot(a.x-b.x,a.y-b.y);
-function poseOf(s,hs,pinch){if(pinch)return'pinch';const ext=j=>dist(s[j],s[0])>dist(s[j-2],s[0])*1.12,i=ext(8),m=ext(12),r=ext(16),p=ext(20);
+const palmC=s=>({x:(s[0].x+s[5].x+s[9].x+s[13].x+s[17].x)/5,y:(s[0].y+s[5].y+s[9].y+s[13].y+s[17].y)/5});
+// puño: las puntas del índice y del medio quedan dentro de la palma (en un pellizco el índice queda afuera)
+const fistLike=(s,hs)=>{const P=palmC(s);return dist(s[8],P)/hs<.85&&dist(s[12],P)/hs<.85};
+
+function poseOf(s,hs,pinch){if(pinch)return'pinch';if(fistLike(s,hs))return'fist';const ext=j=>dist(s[j],palmC(s))/hs>1.15,i=ext(8),m=ext(12),r=ext(16),p=ext(20);
   if(i&&m&&r&&p)return'open';if(i&&!m&&!r&&!p)return'point';return'other'}
 function readHands(res){const seen=new Set();
   hands=res.landmarks.map((l,i)=>{const k='h'+(res.handedness?.[i]?.[0]?.categoryName||i);seen.add(k);const s=l.map(toScreen),hs=dist(s[0],s[9])||1,ratio=dist(s[4],s[8])/hs;
-    const pinch=pinchState[k]?ratio<pinchCfg.off:ratio<pinchCfg.on;pinchState[k]=pinch;return{k,s,tip:s[8],pinch,pp:{x:(s[4].x+s[8].x)/2,y:(s[4].y+s[8].y)/2},pose:poseOf(s,hs,pinch)}});
+    const pinch=!fistLike(s,hs)&&(pinchState[k]?ratio<pinchCfg.off:ratio<pinchCfg.on);pinchState[k]=pinch;return{k,s,tip:s[8],pinch,pp:{x:(s[4].x+s[8].x)/2,y:(s[4].y+s[8].y)/2},pose:poseOf(s,hs,pinch)}});
   for(const k of Object.keys(pinchState))if(!seen.has(k)){delete pinchState[k];delete prevPinch[k]}
   // pellizco y mover: arriba = alejarse, abajo = acercarse
   for(const h of hands){if(h.pinch){const pv=prevPinch[h.k];if(pv){stopAuto();zt=clampZ(zt-(h.pp.y-pv.y)/VH*7)}prevPinch[h.k]={...h.pp}}else delete prevPinch[h.k]}
