@@ -346,7 +346,7 @@ const palmC=s=>({x:(s[0].x+s[5].x+s[9].x+s[13].x+s[17].x)/5,y:(s[0].y+s[5].y+s[9
 // puño: las puntas del índice y del medio quedan dentro de la palma (en un pellizco el índice queda afuera)
 const fistLike=(s,hs)=>{const P=palmC(s);return dist(s[8],P)/hs<.85&&dist(s[12],P)/hs<.85};
 
-function readHands(res){const seen=new Set();
+function readHands(res){if(!res.landmarks.length)hands=[];const seen=new Set();
   hands=res.landmarks.map((l,i)=>{const k='h'+(res.handedness?.[i]?.[0]?.categoryName||i);seen.add(k);
     const s=l.map(toScreen),hs=dist(s[0],s[9])||1,ratio=dist(s[4],s[8])/hs;
     const fl=fistLike(s,hs),was=pinchState[k],pinch=!fl&&(was?ratio<pinchCfg.off:ratio<pinchCfg.on);pinchState[k]=pinch;if(pinch&&!was)delete smooth[k];
@@ -365,10 +365,13 @@ function poseOf(k,s,hs,pinch){if(pinch)return'pinch';if(fistLike(s,hs)){const st
   if(i&&m&&r&&p)return'open';if(i&&!m&&!r&&!p)return'point';if(i&&m&&!r&&!p)return'victory';
   if(!i&&!m&&!r&&!p)return thumbUp?'thumb':'fist';return'other'}
 const poseMem={};
-function stablePose(k,p){const m=poseMem[k]=poseMem[k]||{pose:p,cand:p,n:0};
-  if(p===m.pose){m.cand=p;m.n=0;return p}
-  const need=p==='pinch'?2:m.pose==='pinch'?3:5;   // el pellizco entra rápido; los demás gestos deben mantenerse
-  if(p===m.cand){if(++m.n>=need){m.pose=p;m.n=0}}else{m.cand=p;m.n=1}
+function stablePose(k,p){ // decide por mayoría en los últimos 6 cuadros: las formas intermedias ya no dejan pegado el gesto anterior
+  const m=poseMem[k]=poseMem[k]||{pose:p,h:[]};m.h.push(p);if(m.h.length>6)m.h.shift();
+  if(p==='open'&&m.h.slice(-2).every(x=>x==='open')){m.pose='open';return m.pose}      // mano abierta = cancelar, entra rápido
+  if(p==='pinch'&&m.h.slice(-2).every(x=>x==='pinch')){m.pose='pinch';return m.pose}  // el pellizco entra rápido
+  if(p===m.pose)return m.pose;
+  if(m.h.length>=4&&m.h.filter(x=>x===m.pose).length<=2){const c={};for(const x of m.h)if(x!==m.pose)c[x]=(c[x]||0)+1;
+    let b=null;for(const x in c)if(!b||c[x]>c[b])b=x;if(b&&c[b]>=2)m.pose=b}
   return m.pose}
 
 /* ---------- motor de gestos ----------
@@ -407,10 +410,11 @@ function gestures(now){
       const q=hov[h.k];if(q.slot!=null&&now-q.since>=110){q.stable=q.slot;q.stableAt=now}}
     // pellizco: agarrar la capa del cuadro señalado
     const d=drags[h.k];
-    if(h.pose==='pinch'){
+    if(d&&(h.raw==='open'||h.pose==='open'))dragEnd(h.k);   // ✋ mano abierta: soltar ya
+    else if(h.pose==='pinch'||(d&&h.pinch)){
       if(!d){const q=hov[h.k],lock=q&&q.stable!=null&&now-q.stableAt<450?q.stable:null;dragBegin(h.k,h.pp,lock)}
       else{d.lostAt=null;dragUpdate(h.k,h.pp)}}
-    else if(d){if(!d.lostAt)d.lostAt=now;else if(now-d.lostAt>170)dragEnd(h.k)}
+    else if(d){if(!d.lostAt)d.lostAt=now;else if(now-d.lostAt>150)dragEnd(h.k)}
     // puño: agarrar el cubo entero y girarlo; abrir la mano lo suelta
     const c=h.s[9];palmPrev[h.k]={x:c.x,y:c.y};
     {const cf=getC('f'+h.k),pd=palmStep(h),mv=feed(cf,now,h.pose==='fist'&&h.raw==='fist'&&!busy(),h.pose==='fist'?pd:null);if(mv&&(mv[0]||mv[1]))rotateView(mv[0]*1.3,mv[1]*1.3)}
@@ -466,7 +470,9 @@ function updHover(){hovers.forEach(h=>h.visible=false);if(anim)return;
 
 /* ---------- bucle ---------- */
 let last=performance.now();
+let lastHandT=0;
 function frame(t){requestAnimationFrame(frame);const dt=Math.min(.05,(t-last)/1000);last=t;
+  if(hands.length)lastHandT=t;else if(t-lastHandT>400)for(const k of Object.keys(drags))if(k!=='ptr')dragEnd(k);
   if(ready&&lm&&video.readyState>=2&&video.currentTime!==lastVT){lastVT=video.currentTime;try{readHands(lm.detectForVideo(video,t))}catch(e){console.log(e)}}
   dwell(dt);stepAnim(dt);cube.quaternion.slerp(viewQ,.25);cube.scale.setScalar(cube.scale.x+(zoom-cube.scale.x)*.2);updHover();updHot();
   renderer.render(scene,cam);octx.clearRect(0,0,innerWidth,innerHeight);drawHot(t);drawHands()}

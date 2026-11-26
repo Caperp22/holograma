@@ -321,8 +321,14 @@ const fistLike=(s,hs)=>{const P=palmC(s);return dist(s[8],P)/hs<.85&&dist(s[12],
 function poseOf(k,s,hs,pinch){if(pinch)return'pinch';const st=fingers[k]=fingers[k]||{};if(fistLike(s,hs)){st[8]=st[12]=st[16]=st[20]=false;return'fist'}
   const ext=j=>{const r=dist(s[j],palmC(s))/hs;if(r>1.15)st[j]=true;else if(r<.9)st[j]=false;return!!st[j]};
   const i=ext(8),m=ext(12),r=ext(16),p=ext(20);if(i&&m&&r&&p)return'open';if(i&&!m&&!r&&!p)return'point';if(i&&m&&!r&&!p)return'victory';if(!i&&!m&&!r&&!p)return'fist';return'other'}
-function stablePose(k,p){const m=poseMem[k]=poseMem[k]||{pose:p,cand:p,n:0};if(p===m.pose){m.cand=p;m.n=0;return p}
-  const need=p==='pinch'?2:5;if(p===m.cand){if(++m.n>=need){m.pose=p;m.n=0}}else{m.cand=p;m.n=1}return m.pose}
+function stablePose(k,p){ // decide por mayoría en los últimos 6 cuadros: las formas intermedias ya no dejan pegado el gesto anterior
+  const m=poseMem[k]=poseMem[k]||{pose:p,h:[]};m.h.push(p);if(m.h.length>6)m.h.shift();
+  if(p==='open'&&m.h.slice(-2).every(x=>x==='open')){m.pose='open';return m.pose}      // mano abierta = cancelar, entra rápido
+  if(p==='pinch'&&m.h.slice(-2).every(x=>x==='pinch')){m.pose='pinch';return m.pose}  // el pellizco entra rápido
+  if(p===m.pose)return m.pose;
+  if(m.h.length>=4&&m.h.filter(x=>x===m.pose).length<=2){const c={};for(const x of m.h)if(x!==m.pose)c[x]=(c[x]||0)+1;
+    let b=null;for(const x in c)if(!b||c[x]>c[b])b=x;if(b&&c[b]>=2)m.pose=b}
+  return m.pose}
 
 /* ---------- motor de gestos ----------
    1) un gesto arranca solo si la mano lleva un momento en esa forma (ENGAGE)

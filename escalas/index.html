@@ -360,8 +360,14 @@ function palmStep(h){const c=h.s[9],p=smoothP[h.k],sm=p?{x:p.x*.5+c.x*.5,y:p.y*.
   if(!p)return[0,0];const dx=sm.x-p.x,dy=sm.y-p.y;return Math.hypot(dx,dy)>1.4?[dx,dy]:[0,0]}
 let gestLbl='',gestT=0;function gestShow(t){gestLbl=t;gestT=performance.now()}
 
-const poseMem={};function stablePose(k,p){const m=poseMem[k]=poseMem[k]||{pose:p,cand:p,n:0};if(p===m.pose){m.cand=p;m.n=0;return p}
-  if(p===m.cand){if(++m.n>=4){m.pose=p;m.n=0}}else{m.cand=p;m.n=1}return m.pose}
+const poseMem={};function stablePose(k,p){ // decide por mayoría en los últimos 6 cuadros: las formas intermedias ya no dejan pegado el gesto anterior
+  const m=poseMem[k]=poseMem[k]||{pose:p,h:[]};m.h.push(p);if(m.h.length>6)m.h.shift();
+  if(p==='open'&&m.h.slice(-2).every(x=>x==='open')){m.pose='open';return m.pose}      // mano abierta = cancelar, entra rápido
+  if(p==='pinch'&&m.h.slice(-2).every(x=>x==='pinch')){m.pose='pinch';return m.pose}  // el pellizco entra rápido
+  if(p===m.pose)return m.pose;
+  if(m.h.length>=4&&m.h.filter(x=>x===m.pose).length<=2){const c={};for(const x of m.h)if(x!==m.pose)c[x]=(c[x]||0)+1;
+    let b=null;for(const x in c)if(!b||c[x]>c[b])b=x;if(b&&c[b]>=2)m.pose=b}
+  return m.pose}
 // zoom tipo foto con una mano: separar pulgar e índice acerca, juntarlos aleja (medio, anular y meñique doblados)
 const spreadPrev={};
 function spreadDelta(h){const s=h.s,hs=dist(s[0],s[9])||1,P=palmC(s);
