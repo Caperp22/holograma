@@ -33,6 +33,12 @@ button.on{background:rgba(55,232,255,.25)}
 .row{display:flex;gap:6px;flex-wrap:wrap}.row button{flex:1}
 #pad{display:grid;grid-template-columns:repeat(6,minmax(0,1fr));gap:5px}
 #pad button{padding:0;min-height:42px;font-size:17px}
+#cal{position:fixed;left:50%;top:64px;transform:translateX(-50%);z-index:4;width:min(94vw,460px);background:rgba(2,20,28,.92);border:1px solid var(--y);border-radius:14px;padding:12px 14px;box-shadow:0 0 24px rgba(255,210,63,.25)}
+#calStep{color:var(--y);font-weight:700;font-size:14px}
+#calText{font-size:19px;font-weight:700;margin:4px 0 8px}
+#calBar{height:8px;border-radius:4px;background:rgba(55,232,255,.15);overflow:hidden;margin-bottom:8px}#calBar i{display:block;height:100%;width:0;background:var(--y);transition:width .2s}
+#gest{position:fixed;left:50%;top:118px;transform:translateX(-50%);z-index:3;font-size:30px;font-weight:700;color:#fff;text-shadow:0 0 16px var(--c);opacity:0;transition:opacity .25s;pointer-events:none}
+body.two video{opacity:.4}
 #toast{position:fixed;left:50%;top:70px;transform:translateX(-50%);z-index:4;background:rgba(2,20,28,.9);border:1px solid var(--c);border-radius:10px;padding:8px 14px;font-weight:700;opacity:0;transition:opacity .3s;pointer-events:none;max-width:90vw;text-align:center}
 .sheet{position:fixed;inset:0;z-index:5;display:grid;place-items:center;padding:20px;background:radial-gradient(circle at 50% 30%,rgba(6,48,58,.95),rgba(2,7,11,.98) 70%);overflow:auto}
 .sheet .box{width:100%;max-width:460px}
@@ -54,6 +60,7 @@ button.on{background:rgba(55,232,255,.25)}
 <div id="top">
   <button id="bMenu">Menú</button>
   <div id="title">Holo Rubik</div>
+  <button id="bTwo">Dos manos</button>
   <button id="bLevels">Niveles</button>
 </div>
 
@@ -79,6 +86,13 @@ button.on{background:rgba(55,232,255,.25)}
   </div>
 </div>
 <div id="toast"></div>
+<div id="gest"></div>
+<div id="cal" class="hide">
+  <div id="calStep"></div>
+  <div id="calText"></div>
+  <div id="calBar"><i></i></div>
+  <div class="row"><button id="calSkip">Usar la calibración anterior</button><button id="calCancel">Cancelar</button></div>
+</div>
 
 <div id="intro" class="sheet"><div class="box">
   <h1>Holo Rubik</h1>
@@ -204,7 +218,7 @@ function renderGuide(){
   const g=plan[gi];if(!g){$('gTitle').textContent=info.name;$('gText').textContent=info.goal;$('gNext').classList.add('hide');$('gSeq').innerHTML='';showArrow(null);return}
   $('gTitle').textContent=g.title;$('gText').textContent=g.text;
   const ex=g.moves[mi];$('gNext').classList.remove('hide');
-  $('gMove').textContent=ex;$('gMoveTxt').textContent=(half?'Otra vez: ':'')+C.moveText(ex)+' · flecha amarilla';
+  $('gMove').textContent=ex;$('gMoveTxt').textContent=(half?'Otra vez: ':'')+(two.on?two.text(ex):C.moveText(ex)+' · flecha amarilla');
   $('gSeq').innerHTML=g.moves.map((m,i)=>`<span class="${i<mi?'done':i===mi?'cur':''}">${m}</span>`).join('');
   if(!anim)showArrow(ex.endsWith('2')?ex[0]:ex);
 }
@@ -288,8 +302,9 @@ function toScreen(p){const vw=video.videoWidth||640,vh=video.videoHeight||480,W=
 const dist=(a,b)=>Math.hypot(a.x-b.x,a.y-b.y);
 function readHands(res){const seen=new Set();hands=res.landmarks.map((l,i)=>{const k=res.handedness?.[i]?.[0]?.categoryName||String(i);seen.add(k);
   const s=l.map(toScreen),hs=dist(s[0],s[9])||1,pr=dist(s[4],s[8])/hs,pinch=pinchState[k]?pr<.55:pr<.32;pinchState[k]=pinch;
-  const curl=[8,12,16,20].reduce((a,j)=>a+dist(s[j],s[0]),0)/4/hs;return{k,s,tip:s[8],pinch,pp:{x:(s[4].x+s[8].x)/2,y:(s[4].y+s[8].y)/2},fist:!pinch&&curl<1.25,c:s[9]}});
+  const curl=[8,12,16,20].reduce((a,j)=>a+dist(s[j],s[0]),0)/4/hs;return{k,s,tip:s[8],pinch,pp:{x:(s[4].x+s[8].x)/2,y:(s[4].y+s[8].y)/2},fist:!pinch&&curl<1.25,c:s[9],hs}});
   for(const k of Object.keys(pinchState))if(!seen.has(k))delete pinchState[k];
+  if(two.on){two.onHands(performance.now());return}
   // pellizco: girar capa o vista
   const ph=hands.find(h=>h.pinch);
   if(drag&&drag.src!=='ptr'){const h=hands.find(q=>q.k===drag.src);if(h&&h.pinch)dragMove(h.pp);else drag=null}
@@ -297,7 +312,9 @@ function readHands(res){const seen=new Set();hands=res.landmarks.map((l,i)=>{con
   // puño: girar vista
   const f=hands.find(h=>h.fist);if(f&&!drag){if(fistPrev){view.ty+=(f.c.x-fistPrev.x)*.01;view.tx=Math.max(-1.3,Math.min(1.3,view.tx+(f.c.y-fistPrev.y)*.01))}fistPrev=f.c}else fistPrev=null}
 let dwEl=null,dwT=0,arrDw={m:null,t:0};
-function dwell(dt){let el=null;const h=hands.find(q=>!q.pinch&&!q.fist);
+let dwPrev=null;
+function dwell(dt){let el=null;let h=two.cal?null:hands.find(q=>!q.pinch&&!q.fist);
+  if(h){const mv=dwPrev?Math.hypot(h.tip.x-dwPrev.x,h.tip.y-dwPrev.y):0;dwPrev={...h.tip};if(two.on&&mv>8){dwT=Math.min(dwT,0);arrDw.t=Math.min(arrDw.t,0)}}else dwPrev=null;
   const ah=h&&!drag?arrowAt(h.tip,30):null;
   if(ah&&ah.m===arrDw.m){arrDw.t+=dt;if(arrDw.t>=.8){pressArrow(ah);arrDw.t=-.7}}else arrDw={m:ah?ah.m:null,t:0};
   if(h&&!drag){const e=document.elementFromPoint(h.tip.x,h.tip.y);el=e&&e.closest('button');if(el&&el.disabled)el=null}
@@ -306,7 +323,7 @@ function dwell(dt){let el=null;const h=hands.find(q=>!q.pinch&&!q.fist);
 function drawArrows(dt){updArrowPos();if(pressed.t>0)pressed.t-=dt;
   let ex=guideOn&&!goalReached()?(half||expected()):null;if(ex&&ex.endsWith('2'))ex=ex[0];
   const R=Math.max(17,Math.min(24,innerWidth*.05)),now=performance.now();
-  for(const a of arrowPos){const hot=a.m===ex,pr=pressed.t>0&&pressed.m===a.m,dw=arrDw.m===a.m&&arrDw.t>0;
+  for(const a of arrowPos){if(two.on&&a.m!==ex)continue;const hot=a.m===ex,pr=pressed.t>0&&pressed.m===a.m,dw=arrDw.m===a.m&&arrDw.t>0;
     const col=hot?'#ffd23f':'#37e8ff',rr=R*(hot?1.12+.08*Math.sin(now/150):1);
     octx.globalAlpha=ex&&!hot?.45:1;
     octx.fillStyle=pr?col:'rgba(2,20,28,.85)';octx.beginPath();octx.arc(a.x,a.y,rr,0,7);octx.fill();
@@ -323,12 +340,102 @@ function drawHands(){const W=innerWidth,H=innerHeight;
     octx.shadowColor='#37e8ff';octx.shadowBlur=12;octx.fillStyle=h.pinch?'#fff':'#37e8ff';octx.beginPath();octx.arc(h.pinch?h.pp.x:h.tip.x,h.pinch?h.pp.y:h.tip.y,h.pinch?10:7,0,7);octx.fill();octx.shadowBlur=0;
     if(h.fist){octx.strokeStyle='#ffd23f';octx.lineWidth=3;octx.beginPath();octx.arc(h.c.x,h.c.y,26,0,7);octx.stroke()}}}
 
+
+/* ---------- modo dos manos + calibración ---------- */
+const two={last:{},on:false,pos:new THREE.Vector3(),hist:{},cool:{},pend:null,cal:null,cfg:null,lastRender:0};
+try{two.cfg=JSON.parse(localStorage.getItem('holo-rubik-cal')||'null')}catch(e){}
+const WIN=280;
+function centerPx(){return toPx(cube.localToWorld(new THREE.Vector3()))}
+function roles(){const best={};for(const k of['right','left','up','down','front','back'])best[k]=[-9,null];
+  for(const f of C.FACES){const v=new THREE.Vector3(...C.NORM[f]).applyQuaternion(cube.quaternion);
+    const sc={right:v.x,left:-v.x,up:v.y,down:-v.y,front:v.z,back:-v.z};for(const k in sc)if(sc[k]>best[k][0])best[k]=[sc[k],f]}
+  const r={};for(const k in best)r[k]=best[k][1];return r}
+function wrapA(a){while(a>Math.PI)a-=2*Math.PI;while(a<-Math.PI)a+=2*Math.PI;return a}
+function win(k,now){const h=two.hist[k];if(!h||h.length<2)return null;const cur=h[h.length-1];let old=h[0];for(const q of h)if(q.t>=now-WIN){old=q;break}
+  if(cur.t-old.t<60)return null;const sz=(cur.hs+old.hs)/2;return{dx:(cur.x-old.x)/sz,dy:(cur.y-old.y)/sz,da:wrapA(cur.a-old.a)*180/Math.PI,x:cur.x,y:cur.y}}
+two.text=m=>{const ro=roles(),f=m[0],cw=!m.endsWith("'"),x2=m.endsWith('2')?' (2 veces)':'';const role=Object.keys(ro).find(k=>ro[k]===f);
+  const t={right:cw?'Mano derecha rápido hacia ARRIBA':'Mano derecha rápido hacia ABAJO',left:cw?'Mano izquierda rápido hacia ABAJO':'Mano izquierda rápido hacia ARRIBA',
+    up:cw?'Mano sobre el cubo: barre hacia la IZQUIERDA':'Mano sobre el cubo: barre hacia la DERECHA',down:cw?'Mano bajo el cubo: barre hacia la DERECHA':'Mano bajo el cubo: barre hacia la IZQUIERDA',
+    front:cw?'Gira la muñeca como perilla, a favor del reloj':'Gira la muñeca como perilla, contra el reloj',back:'Esa cara está atrás: mueve las dos manos juntas hacia un lado para voltear el cubo'}[role];
+  return (t||C.moveText(m))+x2};
+function gestureMove(kind,d,p){const ro=roles(),c=centerPx();
+  if(kind==='v'){const right=p.x>c.x,f=right?ro.right:ro.left,up=d<0;return right?(up?f:f+"'"):(up?f+"'":f)}
+  if(kind==='h'){const top=p.y<c.y,f=top?ro.up:ro.down,left=d<0;return top?(left?f:f+"'"):(left?f+"'":f)}
+  return d>0?ro.front:ro.front+"'"}
+let gestT=0;function showGest(t){$('gest').textContent=t;$('gest').style.opacity=1;clearTimeout(gestT);gestT=setTimeout(()=>$('gest').style.opacity=0,700)}
+function commit(g){if(queue.length>1||anim&&queue.length)return;doMove(g.move);showGest(g.move)}
+two.onHands=now=>{
+  for(const h of hands){const a=Math.atan2(h.s[9].y-h.s[0].y,h.s[9].x-h.s[0].x);const arr=two.hist[h.k]=two.hist[h.k]||[];arr.push({t:now,x:h.c.x,y:h.c.y,a,hs:h.hs});while(arr.length&&arr[0].t<now-700)arr.shift()}
+  for(const k of Object.keys(two.hist))if(!hands.some(h=>h.k===k))delete two.hist[k];
+  // el cubo sigue el punto medio entre las dos manos
+  if(hands.length===2){const mx=(hands[0].c.x+hands[1].c.x)/2,my=(hands[0].c.y+hands[1].c.y)/2;ray.setFromCamera(new THREE.Vector2(mx/innerWidth*2-1,-(my/innerHeight)*2+1),cam);
+    const pt=new THREE.Vector3();if(ray.ray.intersectPlane(new THREE.Plane(new THREE.Vector3(0,0,1),0),pt))two.pos.set(Math.max(-1.4,Math.min(1.4,pt.x)),Math.max(-1.4,Math.min(1.4,pt.y)),0)}
+  else two.pos.set(0,0,0);
+  if(two.cal){calStep(now);return}
+  if(!two.cfg)return;
+  const c=two.cfg;
+  for(const h of hands){if((two.cool[h.k]||0)>now)continue;const w=win(h.k,now);if(!w)continue;
+    let g=null;const ad=Math.hypot(w.dx,w.dy);
+    if(Math.abs(w.da)>c.roll&&ad<c.v*.8)g={kind:'r',d:w.da};
+    else if(Math.abs(w.dy)>c.v&&Math.abs(w.dy)>1.5*Math.abs(w.dx))g={kind:'v',d:w.dy};
+    else if(Math.abs(w.dx)>c.h&&Math.abs(w.dx)>1.5*Math.abs(w.dy))g={kind:'h',d:w.dx};
+    if(!g)continue;
+    two.cool[h.k]=now+450;two.hist[h.k]=[];
+    const lg=two.last[h.k];two.last[h.k]={kind:g.kind,sg:Math.sign(g.d),t:now};
+    if(lg&&lg.kind===g.kind&&lg.sg!==Math.sign(g.d)&&now-lg.t<1100){two.last[h.k]=null;continue} // regreso de la mano: se ignora
+    g.key=h.k;g.t=now;g.move=gestureMove(g.kind,g.d,{x:w.x,y:w.y});
+    if(g.kind==='r'){commit(g);continue}
+    const p=two.pend;
+    if(p&&p.key!==g.key&&p.kind===g.kind&&Math.sign(p.d)===Math.sign(g.d)&&now-p.t<200){two.pend=null;
+      if(g.kind==='h'){view.ty+=Math.sign(g.d)*Math.PI/2;showGest(g.d<0?'⟲ volteo':'⟳ volteo')}else{view.tx=Math.max(-1.2,Math.min(1.2,view.tx+(g.d<0?-.7:.7)));showGest('volteo')}}
+    else{if(p)commit(p);two.pend=g}}
+};
+two.frame=now=>{if(two.pend&&now-two.pend.t>=200){commit(two.pend);two.pend=null}};
+
+/* calibración automática */
+const CAL=[
+  {id:'still',step:'Paso 1 de 4 · Quietos',text:'Muestra las dos manos abiertas a los lados del cubo y quédate quieto un momento.'},
+  {id:'v',step:'Paso 2 de 4 · Subir y bajar',text:'Con una mano, haz 2 movimientos rápidos hacia ARRIBA, como empujando el lado del cubo.'},
+  {id:'h',step:'Paso 3 de 4 · Barrer',text:'Pon una mano sobre el cubo y bárrela rápido hacia un lado, 2 veces.'},
+  {id:'r',step:'Paso 4 de 4 · Perilla',text:'Gira la muñeca de una mano como si giraras una perilla, 2 veces.'}];
+function calShow(){const c=two.cal,st=CAL[c.i];$('calStep').textContent=st.step;$('calText').textContent=c.msg||st.text;$('calBar').firstElementChild.style.width=(c.prog*100)+'%'}
+function calStart(){two.cal={i:0,prog:0,still:0,noise:0,sizes:[],peaks:[],ep:null,last:0,msg:''};$('cal').classList.remove('hide');$('calSkip').classList.toggle('hide',!two.cfg);calShow()}
+function calEnd(save){if(save){const c=two.cal,r=c.res;two.cfg=r;try{localStorage.setItem('holo-rubik-cal',JSON.stringify(r))}catch(e){}toast('¡Calibrado! Ya puedes jugar con las dos manos')}
+  two.cal=null;$('cal').classList.add('hide');renderGuide()}
+function calStep(now){const c=two.cal,st=CAL[c.i];c.msg='';
+  if(st.id==='still'){
+    if(hands.length<2){c.msg='No veo las dos manos. Aléjate un poco y ábrelas a los lados.';c.still=Math.max(0,c.still-.05)}
+    else{for(const h of hands){const w=win(h.k,now);if(w&&c.still>.5)c.noise=Math.min(.4,Math.max(c.noise,Math.hypot(w.dx,w.dy)))}c.still+=1/30;c.sizes.push(...hands.map(h=>h.hs))}
+    c.prog=Math.min(1,c.still/1.6);if(c.prog>=1){c.i++;c.prog=0;c.peaks=[]}calShow();return}
+  // detectar un movimiento rápido y guardar su pico
+  let m=0,best=null;
+  for(const h of hands){const w=win(h.k,now);if(!w)continue;const v=st.id==='v'?Math.abs(w.dy):st.id==='h'?Math.abs(w.dx):Math.abs(w.da);if(v>m){m=v;best=w}}
+  const start=st.id==='r'?18:Math.max(.3,c.noise*2.5);
+  if(c.ep){c.ep.peak=Math.max(c.ep.peak,m);if(m<start*.5){c.peaks.push(c.ep.peak);c.ep=null;c.last=now;showGest('✓')}}
+  else if(m>start&&now-c.last>350)c.ep={peak:m};
+  c.prog=c.peaks.length/2;
+  if(c.peaks.length>=2){const k=Math.min(...c.peaks);
+    if(!c.res)c.res={};
+    if(st.id==='v')c.res.v=Math.max(.3,Math.max(c.noise*2.5,k*.55));
+    if(st.id==='h')c.res.h=Math.max(.3,Math.max(c.noise*2.5,k*.55));
+    if(st.id==='r')c.res.roll=Math.max(18,Math.min(60,k*.55));
+    c.i++;c.peaks=[];c.prog=0;
+    if(c.i>=CAL.length){calEnd(true);return}}
+  calShow()}
+$('calSkip').onclick=()=>calEnd(false);
+$('calCancel').onclick=()=>{two.cal=null;$('cal').classList.add('hide');setTwo(false)};
+function setTwo(on){if(on&&!ready){toast('Primero activa la cámara para usar las dos manos');return}
+  two.on=on;two.pend=null;two.hist={};document.body.classList.toggle('two',on);$('bTwo').classList.toggle('on',on);
+  if(on){drag=null;calStart()}else{two.cal=null;$('cal').classList.add('hide');two.pos.set(0,0,0)}
+  renderGuide()}
+$('bTwo').onclick=()=>setTwo(!two.on);
+
 /* ---------- bucle ---------- */
 let last=performance.now();
 function frame(t){requestAnimationFrame(frame);const dt=Math.min(.05,(t-last)/1000);last=t;
   if(ready&&lm&&video.readyState>=2&&video.currentTime!==lastVT){lastVT=video.currentTime;try{readHands(lm.detectForVideo(video,t))}catch(e){console.log(e)}}
-  dwell(dt);stepAnim(dt);
-  view.x+=(view.tx-view.x)*.2;view.y+=(view.ty-view.y)*.2;cube.rotation.set(view.x,view.y,0);
+  dwell(dt);two.frame(performance.now());stepAnim(dt);
+  cube.position.lerp(two.pos,.15);view.x+=(view.tx-view.x)*.2;view.y+=(view.ty-view.y)*.2;cube.rotation.set(view.x,view.y,0);
   if(arrowMove&&!anim){const n=C.NORM[arrowMove[0]],pulse=.55+.45*Math.sin(t/180);arrow.children[0].material.opacity=.5+.5*pulse;
     stickers.forEach((m,i)=>{const p=C.SLOTS[i].p;m.material.opacity=(p[0]*n[0]+p[1]*n[1]+p[2]*n[2]===1)?1:.55})}
   else if(!anim)stickers.forEach(m=>m.material.opacity=1);
