@@ -1,0 +1,285 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<title>Señas LSC</title>
+<link href="https://fonts.googleapis.com/css2?family=Rajdhani:wght@500;700&display=swap" rel="stylesheet">
+<style>
+:root{--c:#37e8ff;--bg:#02070b;--ink:#d8fbff;--y:#ffd23f;--g:#5dff9a}
+*{box-sizing:border-box;min-width:0}
+html,body{margin:0;height:100%;background:var(--bg);color:var(--ink);font:16px/1.4 Rajdhani,system-ui,sans-serif;overflow:hidden;user-select:none;-webkit-user-select:none}
+video{position:fixed;inset:0;width:100%;height:100%;object-fit:cover;opacity:.5;filter:saturate(.6);transform:scaleX(-1)}
+#ov{position:fixed;inset:0;width:100%;height:100%;pointer-events:none;z-index:6}
+button,a.btn{--p:0;font:inherit;font-weight:700;color:var(--c);border:1px solid var(--c);border-radius:10px;min-height:46px;padding:0 14px;cursor:pointer;text-decoration:none;display:inline-flex;align-items:center;justify-content:center;
+  background:linear-gradient(90deg,rgba(55,232,255,.32) calc(var(--p)*100%),rgba(2,20,28,.86) 0)}
+button:focus-visible,a.btn:focus-visible{outline:2px solid #fff;outline-offset:2px}
+button.y{border-color:var(--y);color:var(--y)}button.g{border-color:var(--g);color:var(--g)}
+button:disabled{opacity:.45}
+#top{position:fixed;left:0;right:0;top:0;z-index:4;display:flex;gap:6px;align-items:center;padding:max(10px,env(safe-area-inset-top)) 10px 8px;background:linear-gradient(rgba(2,7,11,.9),rgba(2,7,11,0))}
+#title{flex:1;text-align:center;font-weight:700;font-size:18px;text-shadow:0 0 10px var(--c);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.screen{position:fixed;inset:0;z-index:3;overflow:auto;padding:70px 14px max(16px,env(safe-area-inset-bottom))}
+.wrap{max-width:720px;margin:0 auto}
+.screen.solid{background:radial-gradient(circle at 50% 0%,rgba(6,48,58,.96),rgba(2,7,11,.98) 65%)}
+h1{font-size:clamp(34px,9vw,48px);line-height:1.05;margin:0 0 6px;color:var(--c);text-shadow:0 0 16px var(--c)}
+h2{font-size:22px;margin:18px 0 8px;color:#fff}
+p.note{color:rgba(216,251,255,.8);margin:6px 0}
+.lessons{display:grid;grid-template-columns:minmax(0,1fr);gap:8px}
+@media(min-width:620px){.lessons{grid-template-columns:repeat(2,minmax(0,1fr))}}
+.lesson{text-align:left;justify-content:space-between;min-height:62px;padding:8px 14px;width:100%}
+.lesson span{display:block;font-size:18px;color:#fff}.lesson small{color:var(--y);font-weight:500}
+.bar{height:6px;border-radius:3px;background:rgba(55,232,255,.15);overflow:hidden;margin-top:4px;width:90px}.bar i{display:block;height:100%;background:var(--g)}
+.items{display:flex;flex-wrap:wrap;gap:6px;margin:8px 0}
+.items button{min-width:56px;font-size:19px}
+.items button.done{border-color:var(--g);color:var(--g)}.items button.noref{opacity:.55;border-style:dashed}
+/* práctica */
+#prac{background:transparent;padding:0}
+#pTop{position:absolute;left:0;right:0;top:64px;text-align:center;pointer-events:none}
+#pSign{font-size:clamp(70px,24vw,130px);font-weight:700;line-height:1;color:#fff;text-shadow:0 0 22px var(--c)}
+#pHint{font-size:17px;color:var(--y);font-weight:700;min-height:24px;text-shadow:0 0 6px #000}
+#pMeter{width:min(70vw,320px);height:12px;border-radius:6px;background:rgba(2,20,28,.8);border:1px solid var(--c);margin:8px auto 0;overflow:hidden}#pMeter i{display:block;height:100%;width:0;background:var(--c);transition:width .1s}
+#refBox{position:absolute;right:10px;top:210px;width:118px;height:140px;border:1px solid rgba(255,210,63,.6);border-radius:12px;background:rgba(2,20,28,.75)}
+#refBox canvas{width:100%;height:100%}#refBox span{position:absolute;left:0;right:0;bottom:4px;text-align:center;font-size:12px;color:var(--y);font-weight:700}
+#pBot{position:absolute;left:0;right:0;bottom:0;padding:10px 10px max(10px,env(safe-area-inset-bottom));background:linear-gradient(to top,rgba(2,7,11,.95) 70%,rgba(2,7,11,0));display:flex;flex-direction:column;gap:8px}
+#pBot .row{display:flex;gap:6px;flex-wrap:wrap}#pBot .row>*{flex:1}
+#pInfo{font-size:15px;color:rgba(216,251,255,.9);text-align:center}
+#count{position:fixed;left:50%;top:45%;transform:translate(-50%,-50%);z-index:7;font-size:120px;font-weight:700;color:var(--y);text-shadow:0 0 30px #000;pointer-events:none}
+#toast{position:fixed;left:50%;top:70px;transform:translateX(-50%);z-index:8;background:rgba(2,20,28,.94);border:1px solid var(--c);border-radius:10px;padding:8px 14px;font-weight:700;opacity:0;transition:opacity .3s;pointer-events:none;max-width:90vw;text-align:center}
+textarea{width:100%;min-height:120px;background:rgba(2,20,28,.9);color:#fff;border:1px solid var(--c);border-radius:10px;font:13px/1.3 monospace;padding:8px}
+.tog{display:flex;align-items:center;gap:10px;margin:8px 0}.tog input{width:22px;height:22px}
+select{font:inherit;color:#fff;background:rgba(2,20,28,.9);border:1px solid var(--c);border-radius:10px;min-height:44px;padding:0 8px}
+.ok{color:var(--g)}.bad{color:#ff8a8a}
+.hide{display:none!important}
+</style>
+</head>
+<body>
+<video id="video" playsinline muted></video>
+<canvas id="ov"></canvas>
+<div id="top"><button id="bHome">⌂ Inicio</button><button id="bBack" class="hide">◀ Atrás</button><div id="title">Señas LSC</div><button id="bProf" class="y">Profesor</button></div>
+
+<!-- portada -->
+<div id="intro" class="screen solid"><div class="wrap">
+  <h1>Aprende Lengua de Señas Colombiana</h1>
+  <p class="note">Un curso por niveles para practicar frente a la cámara. Cada seña tiene enlace al <b>diccionario oficial del INSOR</b> y la cámara te dice si tu mano coincide con la seña de referencia.</p>
+  <p class="note">La LSC no es solo manos: también cuentan la posición del cuerpo y la expresión de la cara. Esto sirve para practicar, pero no reemplaza aprender con personas sordas o en un curso de LSC.</p>
+  <button id="start" style="width:100%;margin-top:10px">Activar cámara y empezar</button>
+  <p id="err" class="note bad hide"></p>
+</div></div>
+
+<!-- mapa del curso -->
+<div id="map" class="screen solid hide"><div class="wrap">
+  <h1>Curso LSC</h1>
+  <p class="note" id="mapNote"></p>
+  <div class="lessons" id="lessons"></div>
+  <h2>Retos</h2>
+  <div class="lessons">
+    <button class="lesson" id="rName"><div><span>Deletrea tu nombre</span><small>Letra por letra</small></div></button>
+    <button class="lesson" id="rQuiz"><div><span>Señas al azar</span><small>De todo lo que ya tiene referencia</small></div></button>
+  </div>
+  <h2>Ajustes</h2>
+  <div class="tog"><label for="level">Exigencia:</label><select id="level"><option value="1.3">Fácil</option><option value="1" selected>Normal</option><option value="0.8">Estricta</option></select></div>
+  <p class="note">Diccionario oficial: <a class="btn" style="min-height:36px" href="https://educativo.insor.gov.co/diccionario/" target="_blank" rel="noopener">Abrir diccionario INSOR</a></p>
+</div></div>
+
+<!-- lección -->
+<div id="lesson" class="screen solid hide"><div class="wrap">
+  <h1 id="lName"></h1><p class="note" id="lNote"></p>
+  <div class="items" id="lItems"></div>
+  <button id="lStart" class="g" style="width:100%">Practicar esta lección</button>
+</div></div>
+
+<!-- práctica -->
+<div id="prac" class="screen hide">
+  <div id="pTop"><div id="pSign"></div><div id="pHint"></div><div id="pMeter"><i></i></div></div>
+  <div id="refBox"><canvas id="refCv"></canvas><span>referencia</span></div>
+  <div id="pBot">
+    <div id="pInfo"></div>
+    <div class="row"><a class="btn" id="pDict" href="https://educativo.insor.gov.co/diccionario/" target="_blank" rel="noopener">Ver seña oficial</a><button id="pTry" class="y">Intentar</button></div>
+    <div class="row"><button id="pPrev">◀ Anterior</button><button id="pSkip">Siguiente ▶</button></div>
+    <div class="row" id="profRow"><button id="rStatic" class="y">Grabar referencia quieta</button><button id="rMove" class="y">Grabar con movimiento</button></div>
+  </div>
+</div>
+
+<!-- profesor -->
+<div id="prof" class="screen solid hide"><div class="wrap">
+  <h1>Modo profesor</h1>
+  <p class="note">Aquí se graban las <b>señas de referencia</b> con las que la cámara compara tu práctica. Para cada seña: mira el video oficial en el diccionario del INSOR (o pide ayuda a alguien que sepa LSC), hazla bien frente a la cámara y grábala. Si la seña tiene movimiento, usa «Grabar con movimiento».</p>
+  <div class="tog"><input type="checkbox" id="profOn"><label for="profOn">Mostrar los botones de grabar en la práctica</label></div>
+  <p class="note" id="refCount"></p>
+  <h2>Compartir referencias</h2>
+  <p class="note">Las referencias se guardan en este navegador. Puedes copiarlas para usarlas en otro celular, o mandármelas para dejarlas fijas en el proyecto.</p>
+  <div style="display:flex;gap:6px;flex-wrap:wrap"><button id="exp">Copiar referencias</button><button id="dl">Descargar archivo</button><button id="imp">Cargar desde el texto</button><button id="clr" class="bad" style="border-color:#ff8a8a;color:#ff8a8a">Borrar todas</button></div>
+  <textarea id="refText" placeholder="Aquí aparecen las referencias para copiar, o pega aquí unas para cargarlas"></textarea>
+</div></div>
+
+<div id="count" class="hide"></div>
+<div id="toast"></div>
+
+<script type="module">
+import {FilesetResolver, HandLandmarker} from 'https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@0.10.14/vision_bundle.mjs';
+{
+const $=id=>document.getElementById(id);
+const WASM='https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@0.10.14/wasm';
+const MODEL='https://storage.googleapis.com/mediapipe-models/hand_landmarker/hand_landmarker/float16/1/hand_landmarker.task';
+
+/* ---------- contenido del curso ---------- */
+const ABC=['A','B','C','D','E','F','G','H','I','J','K','L','LL','M','N','Ñ','O','P','Q','R','RR','S','T','U','V','W','X','Y','Z'];
+const LESSONS=[
+ {id:'abc1',name:'Abecedario 1',sub:'A a la F',items:ABC.slice(0,6)},
+ {id:'abc2',name:'Abecedario 2',sub:'G a la L',items:ABC.slice(6,12)},
+ {id:'abc3',name:'Abecedario 3',sub:'LL a la P',items:ABC.slice(12,18)},
+ {id:'abc4',name:'Abecedario 4',sub:'Q a la U',items:ABC.slice(18,24)},
+ {id:'abc5',name:'Abecedario 5',sub:'V a la Z',items:ABC.slice(24)},
+ {id:'num',name:'Números',sub:'Del 0 al 10',items:['0','1','2','3','4','5','6','7','8','9','10']},
+ {id:'sal',name:'Saludos',sub:'Para empezar una conversación',items:['Hola','Buenos días','Buenas tardes','Buenas noches','Gracias','Por favor','¿Cómo estás?','Bien','Mi nombre es','Adiós']},
+ {id:'fam',name:'Familia',sub:'Las personas cercanas',items:['Mamá','Papá','Hermano','Hermana','Hijo','Hija','Abuelo','Abuela']},
+ {id:'col',name:'Colores',sub:'Los básicos',items:['Rojo','Azul','Verde','Amarillo','Blanco','Negro']},
+ {id:'dia',name:'Días de la semana',sub:'De lunes a domingo',items:['Lunes','Martes','Miércoles','Jueves','Viernes','Sábado','Domingo']},
+];
+const kindOf=id=>ABC.includes(id)?'letra':/^\d+$/.test(id)?'número':'palabra';
+
+/* ---------- almacenamiento ---------- */
+const LS={get(k,d){try{return JSON.parse(localStorage.getItem(k))??d}catch(e){return d}},set(k,v){try{localStorage.setItem(k,JSON.stringify(v))}catch(e){}}};
+let REF=LS.get('lsc-ref',{}),BUILTIN={},PROG=LS.get('lsc-prog',{});
+fetch('referencias.json').then(r=>r.ok?r.json():{}).then(j=>{BUILTIN=j||{};renderMap()}).catch(()=>{});
+const refOf=id=>REF[id]||BUILTIN[id]||null;
+function saveRef(){LS.set('lsc-ref',REF);$('refCount').textContent=`Referencias grabadas: ${Object.keys({...BUILTIN,...REF}).length} de ${LESSONS.reduce((a,l)=>a+l.items.length,0)}.`}
+const done=id=>!!PROG[id];
+
+/* ---------- utilidades ---------- */
+let toastT=0;function toast(t){$('toast').textContent=t;$('toast').style.opacity=1;clearTimeout(toastT);toastT=setTimeout(()=>$('toast').style.opacity=0,2200)}
+const sleep=ms=>new Promise(r=>setTimeout(r,ms));
+function show(id){for(const s of['intro','map','lesson','prac','prof'])$(s).classList.toggle('hide',s!==id);$('bBack').classList.toggle('hide',id==='intro'||id==='map');screen=id;
+  $('title').textContent={map:'Curso LSC',lesson:cur.lesson?cur.lesson.name:'Lección',prac:'Práctica',prof:'Modo profesor',intro:'Señas LSC'}[id]}
+let screen='intro';
+
+/* ---------- mapa y lección ---------- */
+const cur={lesson:null,list:[],i:0,mode:'lesson'};
+function renderMap(){const all=LESSONS.flatMap(l=>l.items),nref=all.filter(refOf).length;
+  $('mapNote').textContent=nref?`Hay referencia grabada para ${nref} de ${all.length} señas. Las que no tienen referencia se pueden ver en el diccionario, pero la cámara aún no puede corregirlas.`:'Todavía no hay señas de referencia grabadas. Entra a «Profesor» para grabarlas siguiendo los videos oficiales; mientras tanto puedes ver cada seña en el diccionario.';
+  $('lessons').innerHTML=LESSONS.map(l=>{const d=l.items.filter(done).length;return`<button class="lesson" data-id="${l.id}"><div><span>${l.name}</span><small>${l.sub} · ${d}/${l.items.length} practicadas · ${l.items.filter(refOf).length} con referencia</small><div class="bar"><i style="width:${d/l.items.length*100}%"></i></div></div><b>▶</b></button>`}).join('');
+  $('lessons').querySelectorAll('button').forEach(b=>b.onclick=()=>openLesson(LESSONS.find(l=>l.id===b.dataset.id)));saveRef()}
+function openLesson(l){cur.lesson=l;$('lName').textContent=l.name;
+  $('lNote').textContent=`${l.sub}. Toca una seña para practicarla sola, o practica toda la lección en orden. Verde: ya practicada · punteada: sin referencia todavía.`;
+  $('lItems').innerHTML=l.items.map((it,i)=>`<button data-i="${i}" class="${done(it)?'done':''} ${refOf(it)?'':'noref'}">${it}</button>`).join('');
+  $('lItems').querySelectorAll('button').forEach(b=>b.onclick=()=>startPractice(l.items,+b.dataset.i,'lesson'));
+  $('lStart').onclick=()=>startPractice(l.items,0,'lesson');show('lesson')}
+$('rName').onclick=()=>askName();
+function askName(){const box=document.createElement('div');box.className='screen solid';box.style.zIndex=9;
+  box.innerHTML=`<div class="wrap"><h1>Deletrea tu nombre</h1><p class="note">Escribe tu nombre y lo vas deletreando letra por letra.</p><input id="nm" style="width:100%;font:inherit;font-size:22px;min-height:50px;background:rgba(2,20,28,.9);color:#fff;border:1px solid var(--c);border-radius:10px;padding:0 10px" placeholder="Tu nombre" autocomplete="off"><div style="display:flex;gap:6px;margin-top:10px"><button id="nmGo" class="g" style="flex:1">Empezar</button><button id="nmX" style="flex:1">Cancelar</button></div></div>`;
+  document.body.appendChild(box);box.querySelector('#nmX').onclick=()=>box.remove();
+  box.querySelector('#nmGo').onclick=()=>{const s=box.querySelector('#nm').value.toUpperCase().normalize('NFC').replace(/[^A-ZÑ]/g,'');const out=[];
+    for(let i=0;i<s.length;i++){const two=s.slice(i,i+2);if(two==='LL'||two==='RR'){out.push(two);i++}else out.push(s[i])}
+    box.remove();if(!out.length){toast('Escribe un nombre con letras');return}cur.lesson={name:'Tu nombre'};startPractice(out,0,'name')}}
+$('rQuiz').onclick=()=>{const pool=LESSONS.flatMap(l=>l.items).filter(refOf);if(pool.length<2){toast('Primero hay que grabar al menos 2 señas de referencia (modo Profesor)');return}
+  const list=[];for(let i=0;i<10;i++)list.push(pool[Math.random()*pool.length|0]);cur.lesson={name:'Señas al azar'};startPractice(list,0,'quiz')};
+
+/* ---------- landmarks: normalización y comparación ---------- */
+// cada mano: puntos relativos a la muñeca, escalados por el tamaño de la mano; la mano izquierda se refleja para comparar igual
+function normHand(lm,label){const w=lm[0],m=lm[9],s=Math.hypot(m.x-w.x,m.y-w.y)||1e-3,fl=label==='Left'?-1:1;return{s,w:[w.x,w.y],p:lm.map(q=>[(q.x-w.x)/s*fl,(q.y-w.y)/s,(q.z-w.z)/s*.5])}}
+function frameOf(res){if(!res.landmarks.length)return null;
+  const hs=res.landmarks.map((lm,i)=>({lm,label:res.handedness?.[i]?.[0]?.categoryName||'Right'})).sort((a,b)=>b.lm[0].x-a.lm[0].x).slice(0,2);
+  const n=hs.map(h=>normHand(h.lm,h.label)),f={h:n.map(x=>x.p),w:n.map(x=>x.w),s:n[0].s,fl:hs[0].label==='Left'?-1:1};
+  if(n.length===2)f.rel=[(n[1].w[0]-n[0].w[0])/n[0].s*f.fl,(n[1].w[1]-n[0].w[1])/n[0].s];return f}
+function pdist(a,b){let d=0;for(let i=1;i<21;i++){const x=a[i][0]-b[i][0],y=a[i][1]-b[i][1],z=a[i][2]-b[i][2];d+=Math.sqrt(x*x+y*y+z*z)}return d/20}
+function fdist(a,b){if(!a||!b||a.h.length!==b.h.length)return 9;let d=0;for(let i=0;i<a.h.length;i++)d+=pdist(a.h[i],b.h[i]);d/=a.h.length;
+  if(a.rel&&b.rel)d+=.25*Math.hypot(a.rel[0]-b.rel[0],a.rel[1]-b.rel[1])/3;return d}
+function avgFrames(fr){const n=fr.length,f=JSON.parse(JSON.stringify(fr[0]));for(let k=0;k<f.h.length;k++)for(let i=0;i<21;i++)for(let c=0;c<3;c++)f.h[k][i][c]=fr.reduce((a,x)=>a+x.h[k][i][c],0)/n;
+  if(f.rel)for(let c=0;c<2;c++)f.rel[c]=fr.reduce((a,x)=>a+x.rel[c],0)/n;delete f.w;return f}
+// con movimiento: forma de la mano + recorrido de la muñeca, comparados con DTW
+function seqOf(frames){const f0=frames[0];return frames.map(f=>({h:f.h,rel:f.rel,t:[(f.w[0][0]-f0.w[0][0])/f0.s*f0.fl,(f.w[0][1]-f0.w[0][1])/f0.s]}))}
+function dtw(A,B){const n=A.length,m=B.length,D=Array.from({length:n+1},()=>new Float32Array(m+1).fill(1e9));D[0][0]=0;
+  for(let i=1;i<=n;i++)for(let j=1;j<=m;j++){const a=A[i-1],b=B[j-1],c=fdist(a,b)+.35*Math.hypot(a.t[0]-b.t[0],a.t[1]-b.t[1]);D[i][j]=c+Math.min(D[i-1][j],D[i][j-1],D[i-1][j-1])}
+  return D[n][m]/(n+m)}
+
+/* ---------- práctica ---------- */
+const P={state:'idle',hold:0,lastFrame:null,frames:[],rec:null};
+function tol(){return +$('level').value}
+function startPractice(list,i,mode){cur.list=list;cur.i=i;cur.mode=mode;show('prac');loadItem()}
+function loadItem(){const it=cur.list[cur.i],r=refOf(it);$('pSign').textContent=it;P.state='idle';P.hold=0;$('pMeter').firstElementChild.style.width='0';
+  $('pInfo').textContent=`${cur.lesson?cur.lesson.name+' · ':''}${cur.i+1} de ${cur.list.length} · ${kindOf(it)}`+(r?` · referencia ${r.type==='move'?'con movimiento':'quieta'}${r.n===2?', dos manos':''}`:'');
+  $('pDict').href='https://educativo.insor.gov.co/diccionario/';
+  if(!r){$('pHint').textContent='Aún no hay referencia: mira la seña oficial y practícala en el espejo';$('pTry').disabled=true}
+  else if(r.type==='move'){$('pHint').textContent='Seña con movimiento: toca «Intentar» y hazla después de la cuenta';$('pTry').disabled=false}
+  else{$('pHint').textContent='Haz la seña y mantenla quieta';$('pTry').disabled=true}
+  $('profRow').classList.toggle('hide',!$('profOn').checked);refAnim.t0=performance.now()}
+function next(ok){const it=cur.list[cur.i];if(ok){PROG[it]=Date.now();LS.set('lsc-prog',PROG)}
+  if(cur.i<cur.list.length-1){cur.i++;loadItem()}else{toast(cur.mode==='name'?'¡Deletreaste tu nombre completo!':'¡Lección terminada!');if(cur.mode==='lesson'&&cur.lesson.items)openLesson(cur.lesson);else{renderMap();show('map')}}}
+$('pSkip').onclick=()=>next(false);$('pPrev').onclick=()=>{if(cur.i>0){cur.i--;loadItem()}};
+function success(){P.state='ok';$('pHint').innerHTML='<span class="ok">¡Bien hecho! ✓</span>';$('pMeter').firstElementChild.style.width='100%';setTimeout(()=>next(true),1100)}
+// seña quieta: se compara en vivo y se acepta al sostenerla un momento
+function evalStatic(f,dt){const it=cur.list[cur.i],r=refOf(it);if(!r||r.type!=='static'||P.state!=='idle')return;
+  if(!f){$('pMeter').firstElementChild.style.width='0';P.hold=0;return}
+  const d=fdist(f,r.f),thr=.3*tol();let best=9;for(const id in{...BUILTIN,...REF}){if(id===it)continue;const o=refOf(id);if(o.type==='static')best=Math.min(best,fdist(f,o.f))}
+  const pct=Math.max(0,Math.min(1,1-(d-.1)/.4));$('pMeter').firstElementChild.style.width=(pct*100)+'%';
+  const good=d<thr&&d<=best*.92;
+  if(good){P.hold+=dt;$('pHint').textContent='¡Así! Mantenla…';if(P.hold>.6)success()}
+  else{P.hold=Math.max(0,P.hold-dt*2);$('pHint').textContent=f.h.length!==r.f.h.length?(r.f.h.length===2?'Esta seña es con las dos manos':'Esta seña es con una mano'):d<thr?'Se parece a otra seña: revisa la posición de los dedos':pct>.4?'Casi: ajusta los dedos como en la referencia':'Haz la seña y mantenla quieta'}}
+// cuenta regresiva y captura (para practicar señas con movimiento y para grabar referencias)
+async function countdown(){const c=$('count');c.classList.remove('hide');for(const n of['3','2','1']){c.textContent=n;await sleep(650)}c.textContent='¡Ya!';await sleep(300);c.classList.add('hide')}
+async function capture(ms){P.frames=[];P.capturing=true;await sleep(ms);P.capturing=false;return P.frames.slice()}
+$('pTry').onclick=async()=>{const it=cur.list[cur.i],r=refOf(it);if(!r||r.type!=='move'||P.state!=='idle')return;P.state='busy';$('pHint').textContent='Prepárate…';await countdown();$('pHint').textContent='¡Haz la seña!';
+  const fr=(await capture(r.ms||1500)).filter(Boolean);if(fr.length<8){$('pHint').textContent='No vi bien tu mano. Intenta de nuevo';P.state='idle';return}
+  const d=dtw(seqOf(fr),r.seq),pct=Math.max(0,Math.min(1,1-(d-.15)/.5));$('pMeter').firstElementChild.style.width=(pct*100)+'%';
+  if(d<.42*tol())success();else{$('pHint').textContent=pct>.4?'Casi: revisa el movimiento y la forma de la mano':'No coincide todavía: mira la seña oficial e intenta otra vez';P.state='idle'}};
+// grabar referencias (modo profesor)
+async function record(type){const it=cur.list[cur.i];if(P.state!=='idle')return;P.state='busy';$('pHint').textContent='Grabando referencia de «'+it+'»…';await countdown();
+  const ms=type==='move'?1600:1000,fr=(await capture(ms)).filter(Boolean);
+  if(fr.length<(type==='move'?10:8)){toast('No vi bien la mano. Intenta de nuevo');P.state='idle';loadItem();return}
+  const n=Math.round(fr.reduce((a,f)=>a+f.h.length,0)/fr.length),use=fr.filter(f=>f.h.length===n);
+  REF[it]=type==='move'?{type:'move',n,ms,seq:seqOf(use)}:{type:'static',n,f:avgFrames(use)};saveRef();toast('Referencia de «'+it+'» guardada ✓');loadItem();P.state='cool';$('pHint').textContent='Referencia guardada. Baja la mano y luego practícala';setTimeout(()=>{if(P.state==='cool')P.state='idle'},2000)}
+$('rStatic').onclick=()=>record('static');$('rMove').onclick=()=>record('move');
+
+/* ---------- silueta de la referencia (animada si tiene movimiento) ---------- */
+const refCv=$('refCv'),rctx=refCv.getContext('2d'),refAnim={t0:0};
+const CON=[[0,1],[1,2],[2,3],[3,4],[0,5],[5,6],[6,7],[7,8],[5,9],[9,10],[10,11],[11,12],[9,13],[13,14],[14,15],[15,16],[13,17],[17,18],[18,19],[19,20],[0,17]];
+const hands_n=f=>f.h.length;
+function drawRef(now){const r=refOf(cur.list[cur.i]);const W=refCv.width=refCv.clientWidth*2,H=refCv.height=refCv.clientHeight*2;rctx.clearRect(0,0,W,H);
+  $('refBox').classList.toggle('hide',screen!=='prac'||!r);if(!r||screen!=='prac')return;
+  let f;if(r.type==='move'){const k=Math.floor(((now-refAnim.t0)%((r.ms||1500)+700))/(r.ms||1500)*r.seq.length);f=r.seq[Math.min(r.seq.length-1,k)]}else f=r.f;
+  const hands=f.h,sc=Math.min(W*(hands_n(f)===2?.2:.3),H*.24);hands.forEach((h,hi)=>{const ox=W*(hands.length===2?(hi?.27:.73):.5)+(f.t?-f.t[0]*sc*.4:0),oy=H*.78+(f.t?f.t[1]*sc*.4:0);
+    rctx.strokeStyle='#ffd23f';rctx.lineWidth=4;rctx.lineCap='round';rctx.beginPath();for(const [a,b] of CON){rctx.moveTo(ox-h[a][0]*sc,oy+h[a][1]*sc);rctx.lineTo(ox-h[b][0]*sc,oy+h[b][1]*sc)}rctx.stroke();
+    rctx.fillStyle='#fff';for(const j of[4,8,12,16,20]){rctx.beginPath();rctx.arc(ox-h[j][0]*sc,oy+h[j][1]*sc,5,0,7);rctx.fill()}})}
+
+/* ---------- profesor ---------- */
+$('bProf').onclick=()=>{saveRef();show('prof')};
+$('profOn').checked=LS.get('lsc-profOn',false);$('profOn').onchange=()=>LS.set('lsc-profOn',$('profOn').checked);
+$('exp').onclick=async()=>{const t=JSON.stringify(REF);$('refText').value=t;try{await navigator.clipboard.writeText(t);toast('Referencias copiadas')}catch(e){toast('Selecciona el texto y cópialo')}};
+$('dl').onclick=()=>{const a=document.createElement('a');a.href=URL.createObjectURL(new Blob([JSON.stringify(REF)],{type:'application/json'}));a.download='referencias.json';a.click()};
+$('imp').onclick=()=>{try{const j=JSON.parse($('refText').value);let n=0;for(const k in j)if(j[k]&&(j[k].f||j[k].seq)){REF[k]=j[k];n++}saveRef();renderMap();toast(`Cargué ${n} referencias`)}catch(e){toast('Ese texto no es una lista de referencias válida')}};
+$('clr').onclick=()=>{if(!$('clr').dataset.sure){$('clr').dataset.sure=1;$('clr').textContent='Toca otra vez para borrar';setTimeout(()=>{delete $('clr').dataset.sure;$('clr').textContent='Borrar todas'},3000);return}REF={};saveRef();renderMap();toast('Referencias borradas')};
+
+/* ---------- navegación ---------- */
+$('bHome').onclick=()=>{location.href='../'};
+$('bBack').onclick=()=>{if(screen==='prac'){if(cur.mode==='lesson'&&cur.lesson.items)openLesson(cur.lesson);else{renderMap();show('map')}}else{renderMap();show('map')}};
+
+/* ---------- cámara y manos ---------- */
+const video=$('video'),ov=$('ov'),octx=ov.getContext('2d');let lm=null,ready=false,lastVT=-1,last=performance.now(),lastRes=null;
+function size(){const r=Math.min(devicePixelRatio,2);ov.width=innerWidth*r;ov.height=innerHeight*r;octx.setTransform(r,0,0,r,0,0)}addEventListener('resize',size);size();
+function toScreen(p){const vw=video.videoWidth||640,vh=video.videoHeight||480,W=innerWidth,H=innerHeight,k=Math.max(W/vw,H/vh);return{x:W-(p.x*vw*k-(vw*k-W)/2),y:p.y*vh*k-(vh*k-H)/2}}
+// botones con el índice quieto (en la práctica se pide más tiempo, para no tocarlos al hacer una seña)
+let dwEl=null,dwT=0,dwPrev=null;
+function dwell(dt,res){let el=null;const lmk=res&&res.landmarks[0];
+  if(lmk){const s=lmk.map(toScreen),tip=s[8],ext=j=>Math.hypot(s[j].x-s[0].x,s[j].y-s[0].y)>Math.hypot(s[j-2].x-s[0].x,s[j-2].y-s[0].y)*1.15,point=ext(8)&&!ext(12)&&!ext(16)&&!ext(20);
+    const mv=dwPrev?Math.hypot(tip.x-dwPrev.x,tip.y-dwPrev.y):0;dwPrev=tip;if(point){const e=document.elementFromPoint(tip.x,tip.y);el=e&&e.closest('button,a.btn');if(el&&el.disabled)el=null}if(mv>10)dwT=Math.min(dwT,0)}else dwPrev=null;
+  if(el!==dwEl){if(dwEl)dwEl.style.setProperty('--p',0);dwEl=el;dwT=0}
+  const need=screen==='prac'?1.6:.9;if(el){dwT+=dt;el.style.setProperty('--p',Math.max(0,Math.min(1,dwT/need)));if(dwT>=need){dwT=-.8;if(el.tagName==='A')window.open(el.href,'_blank');else el.click()}}}
+function drawHands(res){octx.clearRect(0,0,innerWidth,innerHeight);if(!res)return;
+  for(const lmk of res.landmarks){const s=lmk.map(toScreen);octx.strokeStyle='rgba(55,232,255,.85)';octx.lineWidth=3;octx.lineCap='round';octx.beginPath();for(const [a,b] of CON){octx.moveTo(s[a].x,s[a].y);octx.lineTo(s[b].x,s[b].y)}octx.stroke();
+    octx.fillStyle='#fff';for(const p of s){octx.beginPath();octx.arc(p.x,p.y,3.5,0,7);octx.fill()}}}
+function frame(t){requestAnimationFrame(frame);const dt=Math.min(.05,(t-last)/1000);last=t;
+  if(ready&&lm&&video.readyState>=2&&video.currentTime!==lastVT){lastVT=video.currentTime;try{lastRes=lm.detectForVideo(video,t);const f=frameOf(lastRes);if(P.capturing)P.frames.push(f);if(screen==='prac')evalStatic(f,dt)}catch(e){console.log(e)}}
+  dwell(dt,lastRes);drawHands(screen==='prac'||screen==='lesson'?lastRes:lastRes);drawRef(t)}
+requestAnimationFrame(frame);
+function fail(m){$('err').textContent=m;$('err').classList.remove('hide');$('start').disabled=false;$('start').textContent='Reintentar'}
+$('start').onclick=async()=>{$('start').disabled=true;$('start').textContent='Cargando…';
+  if(!navigator.mediaDevices?.getUserMedia){fail('Este navegador no deja usar la cámara aquí. Abre la página desde https:// en Chrome o Safari.');return}
+  try{const st=await navigator.mediaDevices.getUserMedia({video:{facingMode:'user',width:{ideal:640},height:{ideal:480}},audio:false});video.srcObject=st;await video.play()}catch(e){fail('No pude abrir la cámara ('+e.name+'). Revisa el permiso.');return}
+  try{const fs=await FilesetResolver.forVisionTasks(WASM);const o=d=>({baseOptions:{modelAssetPath:MODEL,delegate:d},runningMode:'VIDEO',numHands:2,minHandDetectionConfidence:.6,minTrackingConfidence:.6});
+    try{lm=await HandLandmarker.createFromOptions(fs,o('GPU'))}catch(e){lm=await HandLandmarker.createFromOptions(fs,o('CPU'))}}catch(e){fail('No pude cargar el modelo de manos. Revisa tu conexión.');return}
+  ready=true;renderMap();show('map')};
+renderMap();
+}
+</script>
+</body>
+</html>
