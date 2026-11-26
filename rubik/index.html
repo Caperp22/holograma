@@ -351,7 +351,7 @@ function readHands(res){const seen=new Set();
     const s=l.map(toScreen),hs=dist(s[0],s[9])||1,ratio=dist(s[4],s[8])/hs;
     const fl=fistLike(s,hs),was=pinchState[k],pinch=!fl&&(was?ratio<pinchCfg.off:ratio<pinchCfg.on);pinchState[k]=pinch;if(pinch&&!was)delete smooth[k];
     const raw={x:(s[4].x+s[8].x)/2,y:(s[4].y+s[8].y)/2},sm=smooth[k]=smooth[k]?{x:smooth[k].x*.5+raw.x*.5,y:smooth[k].y*.5+raw.y*.5}:raw;
-    return{k,s,tip:s[8],pinch,pp:sm,ratio,hs,pose:stablePose(k,poseOf(k,s,hs,pinch))}});
+    const rp=poseOf(k,s,hs,pinch);return{k,s,tip:s[8],pinch,pp:sm,ratio,hs,raw:rp,pose:stablePose(k,rp)}});
   for(const k of Object.keys(pinchState))if(!seen.has(k)){delete pinchState[k];delete smooth[k];dragEnd(k)}
   if(cal){calStep();return}
   gestures(performance.now())}
@@ -370,6 +370,31 @@ function stablePose(k,p){const m=poseMem[k]=poseMem[k]||{pose:p,cand:p,n:0};
   const need=p==='pinch'?2:m.pose==='pinch'?3:5;   // el pellizco entra rápido; los demás gestos deben mantenerse
   if(p===m.cand){if(++m.n>=need){m.pose=p;m.n=0}}else{m.cand=p;m.n=1}
   return m.pose}
+
+/* ---------- motor de gestos ----------
+   1) un gesto arranca solo si la mano lleva un momento en esa forma (ENGAGE)
+   2) cada movimiento se aplica con un pequeño retraso (COMMIT): si sueltas la mano antes, ese último tramo se descarta
+   3) el zoom mantiene su dirección; para invertirla hay que moverse claramente al revés */
+const ENGAGE=180,COMMIT=150;
+const mkClutch=()=>({on:false,t0:0,q:[],dir:0,opp:0});
+function feed(c,now,active,d){ // d: número o [dx,dy]
+  if(!active){c.on=false;c.q.length=0;c.dir=0;c.opp=0;return null}
+  if(!c.on){c.on=true;c.t0=now;c.q.length=0}
+  if(now-c.t0<ENGAGE)return null;
+  if(d!=null)c.q.push([now,d]);
+  let out=null;while(c.q.length&&now-c.q[0][0]>=COMMIT){const v=c.q.shift()[1];out=out==null?v:(Array.isArray(v)?[out[0]+v[0],out[1]+v[1]]:out+v)}
+  return out}
+function lockDir(c,d){if(!d)return 0;const sg=Math.sign(d);if(!c.dir||sg===c.dir){c.dir=sg;c.opp=0;return d}c.opp+=Math.abs(d);if(c.opp>.14){c.dir=sg;c.opp=0;return d}return 0}
+const clutches={};const getC=(k)=>clutches[k]=clutches[k]||mkClutch();
+const smoothP={},spreadR={};
+// apertura pulgar-índice (con medio, anular y meñique doblados); null si la mano no está en esa forma
+function spreadRatio(h){const s=h.s,hs=dist(s[0],s[9])||1,P=palmC(s);
+  if(![12,16,20].every(j=>dist(s[j],P)/hs<1.0)||dist(s[8],P)/hs<.7)return null;return dist(s[4],s[8])/hs}
+function spreadStep(h){const r=spreadRatio(h);if(r==null){delete spreadR[h.k];return{active:false,d:0}}
+  const prev=spreadR[h.k],sm=prev==null?r:prev*.55+r*.45;spreadR[h.k]=sm;const d=prev==null?0:Math.log(sm/prev);return{active:true,d:Math.abs(d)>.006?d:0}}
+function palmStep(h){const c=h.s[9],p=smoothP[h.k],sm=p?{x:p.x*.5+c.x*.5,y:p.y*.5+c.y*.5}:{x:c.x,y:c.y};smoothP[h.k]=sm;
+  if(!p)return[0,0];const dx=sm.x-p.x,dy=sm.y-p.y;return Math.hypot(dx,dy)>1.4?[dx,dy]:[0,0]}
+
 const palmPrev={},hold={},hov={};let zoom=1,twoOpen=null;
 const HOLD_MS=1200;
 const HOLD_ACT={victory:['Deshacer',()=>$('bUndo').click()],thumb:['Hazlo por mí',()=>{if(!guideOn){toast('Activa la Pista para que te ayude');return}$('bAuto').click()}]};
@@ -387,8 +412,8 @@ function gestures(now){
       else{d.lostAt=null;dragUpdate(h.k,h.pp)}}
     else if(d){if(!d.lostAt)d.lostAt=now;else if(now-d.lostAt>170)dragEnd(h.k)}
     // puño: agarrar el cubo entero y girarlo; abrir la mano lo suelta
-    const c=h.s[9],pv=palmPrev[h.k];palmPrev[h.k]={x:c.x,y:c.y};
-    if(h.pose==='fist'&&pv&&!busy()){const dx=c.x-pv.x,dy=c.y-pv.y;if(Math.hypot(dx,dy)>1.2)rotateView(dx*1.25,dy*1.25)}
+    const c=h.s[9];palmPrev[h.k]={x:c.x,y:c.y};
+    {const cf=getC('f'+h.k),pd=palmStep(h),mv=feed(cf,now,h.pose==='fist'&&h.raw==='fist'&&!busy(),h.pose==='fist'?pd:null);if(mv&&(mv[0]||mv[1]))rotateView(mv[0]*1.3,mv[1]*1.3)}
     // gestos sostenidos
     const hd=hold[h.k]=hold[h.k]||{pose:null,t0:0,fired:false};
     if(hd.pose!==h.pose){hd.pose=h.pose;hd.t0=now;hd.fired=false}
@@ -396,7 +421,7 @@ function gestures(now){
     if(act&&!hd.fired&&now-hd.t0>=HOLD_MS){hd.fired=true;act[1]();toast(act[0])}}
   // dos manos abiertas: zoom
   if(open.length===2){const d=dist(open[0].s[9],open[1].s[9]);if(!twoOpen)twoOpen={d0:d,z0:zoom};zoom=Math.max(.6,Math.min(1.7,twoOpen.z0*d/twoOpen.d0))}else twoOpen=null;
-  for(const k of Object.keys(palmPrev))if(!hands.some(h=>h.k===k)){delete palmPrev[k];delete hold[k];delete poseMem[k];delete hov[k];delete fingers[k]}}
+  for(const k of Object.keys(palmPrev))if(!hands.some(h=>h.k===k)){delete palmPrev[k];delete smoothP[k];delete clutches['f'+k];delete hold[k];delete poseMem[k];delete hov[k];delete fingers[k]}}
 /* calibración automática del pellizco */
 let cal=null,calTimer=0;
 function calShow(){$('calStep').textContent=cal.step===0?'Calibración · 1 de 2':'Calibración · 2 de 2';$('calText').textContent=cal.msg||(cal.step===0?'Muestra una mano abierta, con los dedos separados, a la distancia a la que vas a jugar.':'Ahora junta la punta del pulgar con la del índice y mantenla así.');$('calBar').firstElementChild.style.width=Math.min(100,cal.vals.length/30*100)+'%'}

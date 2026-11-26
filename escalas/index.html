@@ -36,6 +36,7 @@ button.on{background:rgba(55,232,255,.25)}
 .sheet li,.sheet p{color:rgba(216,251,255,.88)}
 .sheet ul{padding-left:20px}
 .sheet button{width:100%;margin-top:8px;min-height:50px;font-size:18px}
+#gestHud{position:fixed;left:50%;top:104px;transform:translateX(-50%);z-index:7;background:rgba(2,20,28,.9);border:1px solid #ffd23f;color:#ffd23f;border-radius:999px;padding:4px 14px;font-weight:700;font-size:16px;pointer-events:none;opacity:0;transition:opacity .2s}
 #err{color:#ff9a9a}
 .hide{display:none!important}
 @media (min-width:700px){#panel{left:auto;right:12px;bottom:12px;width:420px;background:none}#track{bottom:40px}}
@@ -52,6 +53,7 @@ button.on{background:rgba(55,232,255,.25)}
   <div id="title">Viaje de escalas</div>
   <button id="bAuto">Viaje automático</button>
 </div>
+<div id="gestHud"></div>
 <div id="scale"><div id="sExp"></div><div id="sLen"></div><div id="sEnd" style="font-weight:700;color:#ffd23f;font-size:15px;min-height:20px"></div></div>
 <div id="track"><canvas id="tr"></canvas></div>
 <div id="panel">
@@ -333,6 +335,33 @@ const fistLike=(s,hs)=>{const P=palmC(s);return dist(s[8],P)/hs<.85&&dist(s[12],
 function poseOf(s,hs,pinch){if(pinch)return'pinch';if(fistLike(s,hs))return'fist';const ext=j=>dist(s[j],palmC(s))/hs>1.15,i=ext(8),m=ext(12),r=ext(16),p=ext(20);
   if(i&&m&&r&&p)return'open';if(i&&!m&&!r&&!p)return'point';return'other'}
 
+/* ---------- motor de gestos ----------
+   1) un gesto arranca solo si la mano lleva un momento en esa forma (ENGAGE)
+   2) cada movimiento se aplica con un pequeño retraso (COMMIT): si sueltas la mano antes, ese último tramo se descarta
+   3) el zoom mantiene su dirección; para invertirla hay que moverse claramente al revés */
+const ENGAGE=180,COMMIT=150;
+const mkClutch=()=>({on:false,t0:0,q:[],dir:0,opp:0});
+function feed(c,now,active,d){ // d: número o [dx,dy]
+  if(!active){c.on=false;c.q.length=0;c.dir=0;c.opp=0;return null}
+  if(!c.on){c.on=true;c.t0=now;c.q.length=0}
+  if(now-c.t0<ENGAGE)return null;
+  if(d!=null)c.q.push([now,d]);
+  let out=null;while(c.q.length&&now-c.q[0][0]>=COMMIT){const v=c.q.shift()[1];out=out==null?v:(Array.isArray(v)?[out[0]+v[0],out[1]+v[1]]:out+v)}
+  return out}
+function lockDir(c,d){if(!d)return 0;const sg=Math.sign(d);if(!c.dir||sg===c.dir){c.dir=sg;c.opp=0;return d}c.opp+=Math.abs(d);if(c.opp>.14){c.dir=sg;c.opp=0;return d}return 0}
+const clutches={};const getC=(k)=>clutches[k]=clutches[k]||mkClutch();
+const smoothP={},spreadR={};
+// apertura pulgar-índice (con medio, anular y meñique doblados); null si la mano no está en esa forma
+function spreadRatio(h){const s=h.s,hs=dist(s[0],s[9])||1,P=palmC(s);
+  if(![12,16,20].every(j=>dist(s[j],P)/hs<1.0)||dist(s[8],P)/hs<.7)return null;return dist(s[4],s[8])/hs}
+function spreadStep(h){const r=spreadRatio(h);if(r==null){delete spreadR[h.k];return{active:false,d:0}}
+  const prev=spreadR[h.k],sm=prev==null?r:prev*.3+r*.7;spreadR[h.k]=sm;const d=prev==null?0:Math.log(sm/prev);return{active:true,d:Math.abs(d)>.006?d:0}}
+function palmStep(h){const c=h.s[9],p=smoothP[h.k],sm=p?{x:p.x*.5+c.x*.5,y:p.y*.5+c.y*.5}:{x:c.x,y:c.y};smoothP[h.k]=sm;
+  if(!p)return[0,0];const dx=sm.x-p.x,dy=sm.y-p.y;return Math.hypot(dx,dy)>1.4?[dx,dy]:[0,0]}
+let gestLbl='',gestT=0;function gestShow(t){gestLbl=t;gestT=performance.now()}
+
+const poseMem={};function stablePose(k,p){const m=poseMem[k]=poseMem[k]||{pose:p,cand:p,n:0};if(p===m.pose){m.cand=p;m.n=0;return p}
+  if(p===m.cand){if(++m.n>=4){m.pose=p;m.n=0}}else{m.cand=p;m.n=1}return m.pose}
 // zoom tipo foto con una mano: separar pulgar e índice acerca, juntarlos aleja (medio, anular y meñique doblados)
 const spreadPrev={};
 function spreadDelta(h){const s=h.s,hs=dist(s[0],s[9])||1,P=palmC(s);
@@ -343,13 +372,17 @@ function spreadDelta(h){const s=h.s,hs=dist(s[0],s[9])||1,P=palmC(s);
 function readHands(res){if(exploring){try{exploring.contentWindow.postMessage({type:'hands',landmarks:res.landmarks,handedness:res.handedness,vw:video.videoWidth||640,vh:video.videoHeight||480},'*')}catch(e){}hands=[];return}
   const seen=new Set();
   hands=res.landmarks.map((l,i)=>{const k='h'+(res.handedness?.[i]?.[0]?.categoryName||i);seen.add(k);const s=l.map(toScreen),hs=dist(s[0],s[9])||1,ratio=dist(s[4],s[8])/hs;
-    const pinch=!fistLike(s,hs)&&(pinchState[k]?ratio<pinchCfg.off:ratio<pinchCfg.on);pinchState[k]=pinch;return{k,s,tip:s[8],pinch,pp:{x:(s[4].x+s[8].x)/2,y:(s[4].y+s[8].y)/2},pose:poseOf(s,hs,pinch)}});
+    const pinch=!fistLike(s,hs)&&(pinchState[k]?ratio<pinchCfg.off:ratio<pinchCfg.on);pinchState[k]=pinch;return{k,s,tip:s[8],pinch,pp:{x:(s[4].x+s[8].x)/2,y:(s[4].y+s[8].y)/2},pose:stablePose(k,poseOf(s,hs,pinch))}});
   for(const k of Object.keys(pinchState))if(!seen.has(k)){delete pinchState[k];delete prevPinch[k]}
   // pellizco y mover: arriba = alejarse, abajo = acercarse
-  for(const h of hands){if(h.pose!=='open'){const d=spreadDelta(h);if(d){stopAuto();zt=clampZ(zt-d*1.6)}}else delete spreadPrev[h.k]}
+  const now=performance.now();
+  for(const h of hands){const sp=spreadStep(h),cz=getC('z'+h.k),zv=feed(cz,now,sp.active&&h.pose!=='open'&&h.pose!=='fist',sp.d),z=lockDir(cz,zv||0);
+    if(z){stopAuto();zt=clampZ(zt-z*1.6);gestShow(z>0?'Acercando ▲':'Alejando ▼')}}
   // dos manos abiertas: separar = acercarse
-  const op=hands.filter(h=>h.pose==='open');
-  if(op.length===2){const d=dist(op[0].s[9],op[1].s[9]);if(open0){stopAuto();zt=clampZ(zt-Math.log10(d/open0)*4.5)}open0=d}else open0=null}
+  const op=hands.filter(h=>h.pose==='open'),c2=getC('two');let d2=null;
+  if(op.length===2){const d=dist(op[0].s[9],op[1].s[9]);d2=open0?Math.log(d/open0):0;if(Math.abs(d2)<.006)d2=0;open0=d}else open0=null;
+  {const v=feed(c2,now,op.length===2,d2),z=lockDir(c2,v||0);if(z){stopAuto();zt=clampZ(zt-z*2);gestShow(z>0?'Acercando ▲':'Alejando ▼')}}
+  for(const k of Object.keys(clutches))if(k[0]==='z'&&!seen.has(k.slice(1)))delete clutches[k]}
 let dwEl=null,dwT=0,dwPrev=null;
 let spDw={sp:null,t:0};
 function dwell(dt){let el=null;const h=hands.find(q=>q.pose==='point');
@@ -374,7 +407,7 @@ function frame(t){requestAnimationFrame(frame);const dt=Math.min(.05,(t-last)/10
     if(auto.phase==='in'){zt=z-sp*dt;if(zt<=LV[0].z){zt=LV[0].z;auto.phase='out'}}else{zt=z+sp*dt;if(zt>=LV[LV.length-1].z){zt=LV[LV.length-1].z;stopAuto()}}}
   z+= (zt-z)*Math.min(1,dt*(auto?20:5));
   if(stack.length&&zt>=LVmax-.001&&z>=LVmax-.04)exitBranch();
-  render(t);drawHands()}
+  render(t);drawHands();{const g=$('gestHud');const on=performance.now()-gestT<350;g.style.opacity=on?1:0;if(on&&g.textContent!==gestLbl)g.textContent=gestLbl}}
 size();requestAnimationFrame(frame);
 
 /* ---------- cámara ---------- */

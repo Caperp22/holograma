@@ -35,6 +35,7 @@ button.on{background:rgba(55,232,255,.28)}
 #vTop{position:absolute;left:0;right:0;top:0;display:flex;gap:8px;align-items:center;padding:max(10px,env(safe-area-inset-top)) 10px 0}#vCount{color:#ffd23f;font-weight:700}
 #vBot{position:absolute;left:0;right:0;bottom:0;padding:10px 12px max(10px,env(safe-area-inset-bottom));background:linear-gradient(to top,rgba(0,0,0,.9) 70%,rgba(0,0,0,0))}
 #vCap{font-size:17px;font-weight:700;color:#fff}#vCred{font-size:13px;color:rgba(216,251,255,.7);margin:2px 0 8px}.row2{display:flex;gap:8px}.row2 button{flex:1}
+#gestHud{position:fixed;left:50%;top:104px;transform:translateX(-50%);z-index:7;background:rgba(2,20,28,.9);border:1px solid #ffd23f;color:#ffd23f;border-radius:999px;padding:4px 14px;font-weight:700;font-size:16px;pointer-events:none;opacity:0;transition:opacity .2s}
 #credit{position:fixed;left:8px;bottom:2px;z-index:3;font-size:10px;color:rgba(216,251,255,.45);pointer-events:none}
 .leaflet-control-attribution{font-size:10px!important;background:rgba(0,0,0,.55)!important;color:#ccc!important}.leaflet-control-attribution a{color:#9fe!important}
 .sheet{position:fixed;inset:0;z-index:8;display:grid;place-items:center;padding:20px;background:radial-gradient(circle at 50% 30%,rgba(6,48,58,.96),rgba(1,3,6,.98) 70%);overflow:auto}
@@ -59,6 +60,8 @@ button.on{background:rgba(55,232,255,.28)}
 </div>
 <div id="hint"></div>
 <div id="toast"></div>
+<div id="gestHud"></div>
+
 <div id="panel">
   <div id="info"><div id="iName"></div><ul id="iFacts"></ul></div>
   <div id="actions" class="chips"></div>
@@ -321,6 +324,31 @@ function poseOf(k,s,hs,pinch){if(pinch)return'pinch';const st=fingers[k]=fingers
 function stablePose(k,p){const m=poseMem[k]=poseMem[k]||{pose:p,cand:p,n:0};if(p===m.pose){m.cand=p;m.n=0;return p}
   const need=p==='pinch'?2:5;if(p===m.cand){if(++m.n>=need){m.pose=p;m.n=0}}else{m.cand=p;m.n=1}return m.pose}
 
+/* ---------- motor de gestos ----------
+   1) un gesto arranca solo si la mano lleva un momento en esa forma (ENGAGE)
+   2) cada movimiento se aplica con un pequeño retraso (COMMIT): si sueltas la mano antes, ese último tramo se descarta
+   3) el zoom mantiene su dirección; para invertirla hay que moverse claramente al revés */
+const ENGAGE=180,COMMIT=150;
+const mkClutch=()=>({on:false,t0:0,q:[],dir:0,opp:0});
+function feed(c,now,active,d){ // d: número o [dx,dy]
+  if(!active){c.on=false;c.q.length=0;c.dir=0;c.opp=0;return null}
+  if(!c.on){c.on=true;c.t0=now;c.q.length=0}
+  if(now-c.t0<ENGAGE)return null;
+  if(d!=null)c.q.push([now,d]);
+  let out=null;while(c.q.length&&now-c.q[0][0]>=COMMIT){const v=c.q.shift()[1];out=out==null?v:(Array.isArray(v)?[out[0]+v[0],out[1]+v[1]]:out+v)}
+  return out}
+function lockDir(c,d){if(!d)return 0;const sg=Math.sign(d);if(!c.dir||sg===c.dir){c.dir=sg;c.opp=0;return d}c.opp+=Math.abs(d);if(c.opp>.14){c.dir=sg;c.opp=0;return d}return 0}
+const clutches={};const getC=(k)=>clutches[k]=clutches[k]||mkClutch();
+const smoothP={},spreadR={};
+// apertura pulgar-índice (con medio, anular y meñique doblados); null si la mano no está en esa forma
+function spreadRatio(h){const s=h.s,hs=dist(s[0],s[9])||1,P=palmC(s);
+  if(![12,16,20].every(j=>dist(s[j],P)/hs<1.0)||dist(s[8],P)/hs<.7)return null;return dist(s[4],s[8])/hs}
+function spreadStep(h){const r=spreadRatio(h);if(r==null){delete spreadR[h.k];return{active:false,d:0}}
+  const prev=spreadR[h.k],sm=prev==null?r:prev*.3+r*.7;spreadR[h.k]=sm;const d=prev==null?0:Math.log(sm/prev);return{active:true,d:Math.abs(d)>.006?d:0}}
+function palmStep(h){const c=h.s[9],p=smoothP[h.k],sm=p?{x:p.x*.5+c.x*.5,y:p.y*.5+c.y*.5}:{x:c.x,y:c.y};smoothP[h.k]=sm;
+  if(!p)return[0,0];const dx=sm.x-p.x,dy=sm.y-p.y;return Math.hypot(dx,dy)>1.4?[dx,dy]:[0,0]}
+let gestLbl='',gestT=0;function gestShow(t){gestLbl=t;gestT=performance.now()}
+
 // zoom tipo foto con una mano: separar pulgar e índice acerca, juntarlos aleja (medio, anular y meñique doblados)
 const spreadPrev={};
 function spreadDelta(h){const s=h.s,hs=dist(s[0],s[9])||1,P=palmC(s);
@@ -330,13 +358,19 @@ function spreadDelta(h){const s=h.s,hs=dist(s[0],s[9])||1,P=palmC(s);
   if(prev==null)return 0;const d=Math.log(sm/prev);return Math.abs(d)>.012?d:0}
 function readHands(res){const seen=new Set(),now=performance.now();
   hands=res.landmarks.map((l,i)=>{const k='h'+(res.handedness?.[i]?.[0]?.categoryName||i);seen.add(k);const s=l.map(toScreen),hs=dist(s[0],s[9])||1,ratio=dist(s[4],s[8])/hs;
-    const pinch=!fistLike(s,hs)&&(pinchState[k]?ratio<pinchCfg.off:ratio<pinchCfg.on);pinchState[k]=pinch;return{k,s,tip:s[8],pinch,pose:stablePose(k,poseOf(k,s,hs,pinch))}});
-  for(const k of Object.keys(pinchState))if(!seen.has(k)){delete pinchState[k];delete palmPrev[k];delete hold[k];delete poseMem[k];delete fingers[k]}
-  const op=hands.filter(h=>h.pose==='open');
-  if(op.length===2){const d=dist(op[0].s[9],op[1].s[9]);if(open0)zoomBy(open0/d);open0=d}else open0=null;
-  for(const h of hands){const c=h.s[9],pv=palmPrev[h.k];palmPrev[h.k]={x:c.x,y:c.y};
-    if(h.pose==='fist'&&pv){const dx=c.x-pv.x,dy=c.y-pv.y;if(Math.hypot(dx,dy)>1.2)dragBy(dx*1.3,dy*1.3)}
-    if(h.pose!=='fist'&&h.pose!=='open'){const d=spreadDelta(h);if(d)zoomBy(Math.exp(-d*1.2))}else delete spreadPrev[h.k];
+    const pinch=!fistLike(s,hs)&&(pinchState[k]?ratio<pinchCfg.off:ratio<pinchCfg.on);pinchState[k]=pinch;const raw=poseOf(k,s,hs,pinch);return{k,s,tip:s[8],pinch,raw,pose:stablePose(k,raw)}});
+  for(const k of Object.keys(pinchState))if(!seen.has(k)){delete pinchState[k];delete palmPrev[k];delete smoothP[k];delete spreadR[k];delete clutches['f'+k];delete clutches['z'+k];delete hold[k];delete poseMem[k];delete fingers[k]}
+  // dos manos abiertas: separar = acercar
+  const op=hands.filter(h=>h.pose==='open'),c2=getC('two');let d2=null;
+  if(op.length===2){const d=dist(op[0].s[9],op[1].s[9]);d2=open0?Math.log(d/open0):0;if(Math.abs(d2)<.006)d2=0;open0=d}else open0=null;
+  {const v=feed(c2,now,op.length===2,d2);const z=lockDir(c2,v||0);if(z){zoomBy(Math.exp(-z*1.3));gestShow(z>0?'Acercando ▲':'Alejando ▼')}}
+  for(const h of hands){
+    // puño: girar o mover el mapa
+    const cf=getC('f'+h.k),pd=palmStep(h),mv=feed(cf,now,h.pose==='fist'&&h.raw==='fist',h.pose==='fist'?pd:null);
+    if(mv&&(mv[0]||mv[1])){dragBy(mv[0]*1.3,mv[1]*1.3);gestShow(mode==='map'?'Moviendo el mapa':'Girando')}
+    // pellizco que se abre o se cierra: zoom tipo foto
+    const sp=spreadStep(h),cz=getC('z'+h.k),zv=feed(cz,now,sp.active&&h.pose!=='fist'&&h.pose!=='open',sp.d),z=lockDir(cz,zv||0);
+    if(z){zoomBy(Math.exp(-z*1.2));gestShow(z>0?'Acercando ▲':'Alejando ▼')}
     const hd=hold[h.k]=hold[h.k]||{pose:null,t0:0,fired:false};if(hd.pose!==h.pose){hd.pose=h.pose;hd.t0=now;hd.fired=false}
     h.holdP=h.pose==='victory'&&!hd.fired?Math.min(1,(now-hd.t0)/1200):0;if(h.pose==='victory'&&!hd.fired&&now-hd.t0>=1200){hd.fired=true;toast('Atrás');goBack()}}}
 // apuntar y dejar quieto: botones y planetas
@@ -384,7 +418,7 @@ function frame(t){requestAnimationFrame(frame);const dt=Math.min(.05,(t-last)/10
       const idle=!spinUser||t-spinUser>4000;if(b.spin&&(b!==focus||idle))b.mesh.rotation.y+=dt*b.spin*(b===focus?.5:1)}
     if(byId.tierra.clouds)byId.tierra.clouds.rotation.y+=dt*.01;
     stepDive(dt);if(!dive)updateCamera();else{cam.position.copy(camPos);cam.lookAt(camTarget)}renderer.render(scene,cam)}
-  drawHands();drawLabels();drawGauge()}
+  drawHands();drawLabels();drawGauge();{const g=$('gestHud');const on=performance.now()-gestT<350;g.style.opacity=on?1:0;if(on&&g.textContent!==gestLbl)g.textContent=gestLbl}}
 size();setUI();requestAnimationFrame(frame);
 
 /* ---------- inicio por enlace: #tierra, #luna, #colombia… ---------- */
