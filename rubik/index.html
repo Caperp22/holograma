@@ -82,7 +82,7 @@ button.on{background:rgba(55,232,255,.25)}
 
 <div id="intro" class="sheet"><div class="box">
   <h1>Holo Rubik</h1>
-  <p>Aprende a armar el cubo paso a paso. <b>Pellizca un cuadro y arrastra</b> para girar esa capa. Pellizca fuera del cubo o cierra el puño para darle vuelta y verlo por todos lados. Para tocar un botón, deja el dedo índice quieto encima.</p>
+  <p>Aprende a armar el cubo paso a paso. Alrededor del cubo hay <b>flechas</b>, una por cada capa: <b>pellizca la flecha</b> (o deja el dedo quieto sobre ella) y esa capa gira hacia donde apunta. La flecha que debes usar brilla en <b style="color:#ffd23f">amarillo</b>. Cierra el puño o pellizca fuera del cubo para darle vuelta. Para tocar un botón, deja el dedo índice quieto encima.</p>
   <button id="start">Activar cámara</button>
   <button id="touch">Usar el dedo en la pantalla</button>
   <p id="err" class="hide"></p>
@@ -118,7 +118,7 @@ const renderer=new THREE.WebGLRenderer({canvas:$('gl'),antialias:true,alpha:true
 renderer.setPixelRatio(Math.min(devicePixelRatio,2));
 const scene=new THREE.Scene(),cam=new THREE.PerspectiveCamera(40,1,.1,100);
 const cube=new THREE.Group();scene.add(cube);const pivot=new THREE.Group();cube.add(pivot);
-const view={x:.5,y:-.7,tx:.5,ty:-.7};
+const view={x:.38,y:-.5,tx:.38,ty:-.5};
 const bodies=[],stickers=[];
 const bodyGeo=new THREE.BoxGeometry(.96,.96,.96),edgeGeo=new THREE.EdgesGeometry(bodyGeo);
 for(const x of[-1,0,1])for(const y of[-1,0,1])for(const z of[-1,0,1]){if(!x&&!y&&!z)continue;
@@ -143,12 +143,12 @@ const arrow=new THREE.Group();cube.add(arrow);arrow.visible=false;
 let arrowMove=null;
 function showArrow(m){arrowMove=m;if(!m){arrow.visible=false;return}
   const n=C.NORM[m[0]],cw=!m.endsWith("'"),dir=new THREE.Vector3(...n).multiplyScalar(cw?-1:1);
-  arrow.quaternion.setFromUnitVectors(Z,dir);arrow.position.set(n[0]*1.05,n[1]*1.05,n[2]*1.05);arrow.visible=true}
+  arrow.quaternion.setFromUnitVectors(Z,dir);arrow.position.set(n[0]*1.05,n[1]*1.05,n[2]*1.05);arrow.visible=false}
 
 function size(){const W=innerWidth,H=innerHeight;renderer.setSize(W,H,false);
   const ov=$('ov'),r=Math.min(devicePixelRatio,2);ov.width=W*r;ov.height=H*r;octx.setTransform(r,0,0,r,0,0);
   const topH=$('top').getBoundingClientRect().bottom+8,wide=W>=700,panH=wide?0:$('panel').getBoundingClientRect().height;
-  const availH=Math.max(160,H-topH-panH),availW=wide?W-424:W;const S=5.6,t=Math.tan(THREE.MathUtils.degToRad(20));
+  const availH=Math.max(160,H-topH-panH),availW=wide?W-424:W;const S=7.0,t=Math.tan(THREE.MathUtils.degToRad(20));
   cam.aspect=W/H;const d=S*H/(2*t*Math.min(availH,availW));cam.position.set(0,0,d);
   const cy=topH+availH/2,cx=wide?availW/2:W/2;cam.setViewOffset(W,H,W/2-cx,H/2-cy,W,H);cam.updateProjectionMatrix()}
 const octx=$('ov').getContext('2d');
@@ -204,7 +204,7 @@ function renderGuide(){
   const g=plan[gi];if(!g){$('gTitle').textContent=info.name;$('gText').textContent=info.goal;$('gNext').classList.add('hide');$('gSeq').innerHTML='';showArrow(null);return}
   $('gTitle').textContent=g.title;$('gText').textContent=g.text;
   const ex=g.moves[mi];$('gNext').classList.remove('hide');
-  $('gMove').textContent=ex;$('gMoveTxt').textContent=(half?'Otra vez: ':'')+C.moveText(ex);
+  $('gMove').textContent=ex;$('gMoveTxt').textContent=(half?'Otra vez: ':'')+C.moveText(ex)+' · flecha amarilla';
   $('gSeq').innerHTML=g.moves.map((m,i)=>`<span class="${i<mi?'done':i===mi?'cur':''}">${m}</span>`).join('');
   if(!anim)showArrow(ex.endsWith('2')?ex[0]:ex);
 }
@@ -236,7 +236,7 @@ $('bAuto').onclick=()=>{const ex=expected();if(!ex||anim||queue.length)return;do
 $('bUndo').onclick=()=>{if(anim||queue.length||!history.length)return;doMove(C.inverse(history.pop()),'undo')};
 $('bScr').onclick=()=>{if(anim||queue.length)return;history=[];for(const m of C.scramble(20))doMove(m,'scramble',true)};
 $('bReset').onclick=()=>{state=C.SOLVED.slice();history=[];layout();replan()};
-$('bView').onclick=()=>{view.tx=.5;view.ty=-.7};
+$('bView').onclick=()=>{view.tx=.38;view.ty=-.5};
 $('bLevels').onclick=()=>{buildLevels();$('levels').classList.remove('hide')};
 $('bMenu').onclick=()=>{location.href='../juegos/'};
 $('dNext').onclick=()=>{if(mode==='level'&&level<7)startMode('level',level+1);else startMode('final')};
@@ -255,9 +255,25 @@ function dragToMove(slot,dv){const s=C.SLOTS[slot],hp=new THREE.Vector3(...s.p).
     if(!best||Math.abs(sc)>Math.abs(best.sc))best={a,sc}}
   const layer=best.a[0]*s.p[0]+best.a[1]*s.p[1]+best.a[2]*s.p[2];if(!layer){toast('Arrastra sobre una capa del borde, no la del medio');return null}
   const face=FACE_OF[best.a.map(v=>v*layer).join(',')],rot=Math.sign(best.sc)*layer;return rot<0?face:face+"'"}
+/* flechas de giro: una por capa y dirección */
+const ARROWS=[
+ {m:'U',p:[-2.35,1,1],d:[-1,0,0]},{m:"U'",p:[2.35,1,1],d:[1,0,0]},
+ {m:"D'",p:[-2.35,-1,1],d:[-1,0,0]},{m:'D',p:[2.35,-1,1],d:[1,0,0]},
+ {m:"L'",p:[-1,2.35,1],d:[0,1,0]},{m:'R',p:[1,2.35,1],d:[0,1,0]},
+ {m:'L',p:[-1,-2.35,1],d:[0,-1,0]},{m:"R'",p:[1,-2.35,1],d:[0,-1,0]},
+ {m:"F'",p:[-2.5,0,1],d:[0,-1,0],curve:-1},{m:'F',p:[2.5,0,1],d:[0,-1,0],curve:1},
+ {m:'B',p:[-1.1,2.1,-1.5],d:[-1,0,0]},{m:"B'",p:[1.1,2.1,-1.5],d:[1,0,0]}];
+let arrowPos=[];
+function updArrowPos(){arrowPos=ARROWS.map(a=>{const p=new THREE.Vector3(...a.p),q=p.clone().addScaledVector(new THREE.Vector3(...a.d).normalize(),.5);
+  const s0=toPx(cube.localToWorld(p.clone())),s1=toPx(cube.localToWorld(q));return{...a,x:s0.x,y:s0.y,ang:Math.atan2(s1.y-s0.y,s1.x-s0.x)}})}
+function arrowAt(p,r=34){let best=null,bd=r;for(const a of arrowPos){const d=Math.hypot(a.x-p.x,a.y-p.y);if(d<bd){bd=d;best=a}}return best}
+let pressed={m:null,t:0};
+function pressArrow(a){if(anim||queue.length)return;pressed={m:a.m,t:.35};doMove(a.m)}
 let drag=null;
-function dragStart(src,p){drag={src,start:{...p},last:{...p},slot:hitSlot(p.x,p.y),used:false}}
-function dragMove(p){if(!drag)return;
+function dragStart(src,p){const a=arrowAt(p);
+  if(a){pressArrow(a);drag={src,start:{...p},last:{...p},slot:null,used:true,arrow:true};return}
+  drag={src,start:{...p},last:{...p},slot:src==='ptr'?hitSlot(p.x,p.y):null,used:false}}
+function dragMove(p){if(!drag||drag.arrow)return;
   if(drag.slot!=null){if(!drag.used){const dv={x:p.x-drag.start.x,y:p.y-drag.start.y};if(Math.hypot(dv.x,dv.y)>Math.max(26,innerWidth*.05)){drag.used=true;const m=dragToMove(drag.slot,dv);if(m)doMove(m)}}}
   else{view.ty+=(p.x-drag.last.x)*.008;view.tx=Math.max(-1.3,Math.min(1.3,view.tx+(p.y-drag.last.y)*.008))}
   drag.last={...p}}
@@ -280,12 +296,28 @@ function readHands(res){const seen=new Set();hands=res.landmarks.map((l,i)=>{con
   else if(ph&&!drag)dragStart(ph.k,ph.pp);
   // puño: girar vista
   const f=hands.find(h=>h.fist);if(f&&!drag){if(fistPrev){view.ty+=(f.c.x-fistPrev.x)*.01;view.tx=Math.max(-1.3,Math.min(1.3,view.tx+(f.c.y-fistPrev.y)*.01))}fistPrev=f.c}else fistPrev=null}
-let dwEl=null,dwT=0;
+let dwEl=null,dwT=0,arrDw={m:null,t:0};
 function dwell(dt){let el=null;const h=hands.find(q=>!q.pinch&&!q.fist);
+  const ah=h&&!drag?arrowAt(h.tip,30):null;
+  if(ah&&ah.m===arrDw.m){arrDw.t+=dt;if(arrDw.t>=.8){pressArrow(ah);arrDw.t=-.7}}else arrDw={m:ah?ah.m:null,t:0};
   if(h&&!drag){const e=document.elementFromPoint(h.tip.x,h.tip.y);el=e&&e.closest('button');if(el&&el.disabled)el=null}
   if(el!==dwEl){if(dwEl)dwEl.style.setProperty('--p',0);dwEl=el;dwT=0}
   if(el){dwT+=dt;el.style.setProperty('--p',Math.max(0,Math.min(1,dwT/.9)));if(dwT>=.9){el.click();dwT=-.8}}}
-function drawHands(){const W=innerWidth,H=innerHeight;octx.clearRect(0,0,W,H);
+function drawArrows(dt){updArrowPos();if(pressed.t>0)pressed.t-=dt;
+  let ex=guideOn&&!goalReached()?(half||expected()):null;if(ex&&ex.endsWith('2'))ex=ex[0];
+  const R=Math.max(17,Math.min(24,innerWidth*.05)),now=performance.now();
+  for(const a of arrowPos){const hot=a.m===ex,pr=pressed.t>0&&pressed.m===a.m,dw=arrDw.m===a.m&&arrDw.t>0;
+    const col=hot?'#ffd23f':'#37e8ff',rr=R*(hot?1.12+.08*Math.sin(now/150):1);
+    octx.globalAlpha=ex&&!hot?.45:1;
+    octx.fillStyle=pr?col:'rgba(2,20,28,.85)';octx.beginPath();octx.arc(a.x,a.y,rr,0,7);octx.fill();
+    octx.shadowColor=col;octx.shadowBlur=hot?18:6;octx.strokeStyle=col;octx.lineWidth=hot?3:1.8;octx.stroke();octx.shadowBlur=0;
+    if(dw){octx.strokeStyle='#fff';octx.lineWidth=3;octx.beginPath();octx.arc(a.x,a.y,rr+4,-Math.PI/2,-Math.PI/2+Math.PI*2*Math.min(1,arrDw.t/.8));octx.stroke()}
+    const ang=a.curve?(a.curve>0?Math.PI*.5:Math.PI*.5):a.ang;
+    octx.save();octx.translate(a.x,a.y);octx.rotate(ang);octx.fillStyle=col;octx.beginPath();octx.moveTo(rr+11,0);octx.lineTo(rr+1,-8);octx.lineTo(rr+1,8);octx.closePath();octx.fill();octx.restore();
+    if(a.curve){octx.strokeStyle=pr?'#02070b':col;octx.lineWidth=2;octx.beginPath();octx.arc(a.x,a.y,rr*.78,a.curve>0?-2.2:-.94,a.curve>0?-.94:-2.2,a.curve<0);octx.stroke()}
+    octx.font=`700 ${Math.round(rr*.95)}px Rajdhani,system-ui,sans-serif`;octx.textAlign='center';octx.textBaseline='middle';octx.fillStyle=pr?'#02070b':(hot?'#fff':col);octx.fillText(a.m,a.x,a.y+1)}
+  octx.globalAlpha=1}
+function drawHands(){const W=innerWidth,H=innerHeight;
   for(const h of hands){octx.strokeStyle='rgba(55,232,255,.35)';octx.lineWidth=1.5;octx.beginPath();
     for(const {start,end} of HandLandmarker.HAND_CONNECTIONS){octx.moveTo(h.s[start].x,h.s[start].y);octx.lineTo(h.s[end].x,h.s[end].y)}octx.stroke();
     octx.shadowColor='#37e8ff';octx.shadowBlur=12;octx.fillStyle=h.pinch?'#fff':'#37e8ff';octx.beginPath();octx.arc(h.pinch?h.pp.x:h.tip.x,h.pinch?h.pp.y:h.tip.y,h.pinch?10:7,0,7);octx.fill();octx.shadowBlur=0;
@@ -297,10 +329,10 @@ function frame(t){requestAnimationFrame(frame);const dt=Math.min(.05,(t-last)/10
   if(ready&&lm&&video.readyState>=2&&video.currentTime!==lastVT){lastVT=video.currentTime;try{readHands(lm.detectForVideo(video,t))}catch(e){console.log(e)}}
   dwell(dt);stepAnim(dt);
   view.x+=(view.tx-view.x)*.2;view.y+=(view.ty-view.y)*.2;cube.rotation.set(view.x,view.y,0);
-  if(arrow.visible&&arrowMove){const n=C.NORM[arrowMove[0]],pulse=.55+.45*Math.sin(t/180);arrow.children[0].material.opacity=.5+.5*pulse;
+  if(arrowMove&&!anim){const n=C.NORM[arrowMove[0]],pulse=.55+.45*Math.sin(t/180);arrow.children[0].material.opacity=.5+.5*pulse;
     stickers.forEach((m,i)=>{const p=C.SLOTS[i].p;m.material.opacity=(p[0]*n[0]+p[1]*n[1]+p[2]*n[2]===1)?1:.55})}
   else if(!anim)stickers.forEach(m=>m.material.opacity=1);
-  renderer.render(scene,cam);drawHands()}
+  renderer.render(scene,cam);octx.clearRect(0,0,innerWidth,innerHeight);drawArrows(dt);drawHands()}
 size();startMode('free');requestAnimationFrame(frame);
 
 /* ---------- cámara ---------- */
