@@ -1,0 +1,312 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<title>Holo Arcade</title>
+<link href="https://fonts.googleapis.com/css2?family=Rajdhani:wght@500;700&display=swap" rel="stylesheet">
+<style>
+:root{--c:#37e8ff;--bg:#02070b}
+*{box-sizing:border-box;min-width:0}
+html,body{margin:0;height:100%;background:var(--bg);color:#d8fbff;font:16px/1.4 Rajdhani,system-ui,sans-serif;overflow:hidden;touch-action:none;user-select:none;-webkit-user-select:none}
+video{position:fixed;inset:0;width:100%;height:100%;object-fit:cover;opacity:.28;filter:saturate(.3) brightness(.85)}
+video.mirror{transform:scaleX(-1)}
+canvas{position:fixed;inset:0;width:100%;height:100%}
+#scan{position:fixed;inset:0;pointer-events:none;background:repeating-linear-gradient(0deg,rgba(55,232,255,.045) 0 1px,transparent 1px 4px)}
+#intro{position:fixed;inset:0;display:grid;place-items:center;padding:24px;background:radial-gradient(circle at 50% 35%,rgba(6,48,58,.94),rgba(2,7,11,.98) 70%);z-index:5;overflow:auto}
+#intro .box{max-width:440px;width:100%}
+#intro h1{font-size:44px;line-height:1.05;margin:0 0 10px;color:var(--c);text-shadow:0 0 16px var(--c)}
+#intro p{margin:8px 0}
+button{font:inherit;font-weight:700;font-size:19px;color:var(--c);background:rgba(2,20,28,.8);border:1px solid var(--c);border-radius:12px;min-height:52px;padding:0 20px;width:100%;margin-top:12px;cursor:pointer}
+button.alt{border-color:rgba(55,232,255,.4);font-size:16px;min-height:44px}
+button:focus-visible{outline:2px solid #fff;outline-offset:2px}
+button:disabled{opacity:.5}
+#err{color:#ff9a9a;margin-top:12px}
+.hide{display:none!important}
+@media (prefers-reduced-motion:reduce){#scan{display:none}}
+</style>
+</head>
+<body>
+<video id="video" class="mirror" playsinline muted></video>
+<canvas id="cv"></canvas>
+<div id="scan"></div>
+<div id="intro"><div class="box">
+  <h1>Holo Arcade</h1>
+  <p>4 juegos que controlas con las manos. Apoya el celular, aléjate unos 50 cm y elige en el menú dejando el dedo índice quieto sobre un juego.</p>
+  <button id="start">Activar cámara</button>
+  <button id="touch" class="alt">Jugar con el dedo en la pantalla</button>
+  <div id="err" class="hide"></div>
+</div></div>
+
+<script type="module">
+import {FilesetResolver, HandLandmarker} from 'https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@0.10.14/vision_bundle.mjs';
+{
+const WASM='https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@0.10.14/wasm';
+const MODEL='https://storage.googleapis.com/mediapipe-models/hand_landmarker/hand_landmarker/float16/1/hand_landmarker.task';
+const $=id=>document.getElementById(id);
+const video=$('video'),cv=$('cv'),ctx=cv.getContext('2d');
+const C='#37e8ff',YEL='#ffd23f',MAG='#ff4fd8',GRN='#5dff9a',RED='#ff4d6d',ORA='#ff9a3c',WHT='#e9fdff';
+const COLS=[C,YEL,MAG,GRN,ORA,WHT];
+let W=0,H=0,U=1,DPR=1,now=0,flash=0,lm=null,ready=false,mirror=true;
+
+function size(){W=innerWidth;H=innerHeight;U=Math.min(W,H)/100;DPR=Math.min(devicePixelRatio||1,1.5);cv.width=W*DPR;cv.height=H*DPR;ctx.setTransform(DPR,0,0,DPR,0,0)}
+addEventListener('resize',size);size();
+
+/* ---------- utilidades ---------- */
+const dist=(a,b)=>Math.hypot(a.x-b.x,a.y-b.y);
+const clamp=(v,a,b)=>Math.max(a,Math.min(b,v));
+const rnd=(a,b)=>a+Math.random()*(b-a);
+function segDist(a,b,p){const dx=b.x-a.x,dy=b.y-a.y,l=dx*dx+dy*dy;let t=l?((p.x-a.x)*dx+(p.y-a.y)*dy)/l:0;t=clamp(t,0,1);return Math.hypot(p.x-(a.x+t*dx),p.y-(a.y+t*dy))}
+function poly(x,y,r,n,rot=0){ctx.beginPath();if(!n){ctx.arc(x,y,r,0,Math.PI*2);return}for(let i=0;i<n;i++){const a=rot+i/n*Math.PI*2-Math.PI/2;const px=x+Math.cos(a)*r,py=y+Math.sin(a)*r;i?ctx.lineTo(px,py):ctx.moveTo(px,py)}ctx.closePath()}
+function glow(col,b){ctx.shadowColor=col;ctx.shadowBlur=b}
+function noGlow(){ctx.shadowBlur=0}
+function txt(s,x,y,sz,col=WHT,al='center',wt=700){ctx.font=`${wt} ${sz}px Rajdhani,system-ui,sans-serif`;ctx.fillStyle=col;ctx.textAlign=al;ctx.textBaseline='middle';ctx.fillText(s,x,y)}
+function rrect(x,y,w,h,r){ctx.beginPath();ctx.roundRect?ctx.roundRect(x,y,w,h,r):ctx.rect(x,y,w,h)}
+function getBest(id){try{const v=localStorage.getItem('holo-best-'+id);return v==null?null:+v}catch(e){return null}}
+function setBest(id,v){try{localStorage.setItem('holo-best-'+id,v)}catch(e){}}
+
+/* ---------- partículas ---------- */
+let parts=[];
+function burst(x,y,col,n){for(let i=0;i<n;i++){const a=Math.random()*7,s=rnd(.3,1)*U*45;parts.push({t:'s',x,y,vx:Math.cos(a)*s,vy:Math.sin(a)*s,life:rnd(.4,.8),col})}}
+function pop(x,y,s,col){parts.push({t:'txt',x,y,vx:0,vy:-U*18,life:.9,col,s})}
+function updParts(dt){for(const p of parts){p.x+=p.vx*dt;p.y+=p.vy*dt;p.life-=dt;if(p.t==='h')p.vy+=H*1.2*dt;p.rot=(p.rot||0)+(p.vr||0)*dt}parts=parts.filter(p=>p.life>0)}
+function drawParts(){for(const p of parts){ctx.globalAlpha=clamp(p.life*1.6,0,1);
+  if(p.t==='s'){ctx.fillStyle=p.col;ctx.fillRect(p.x-2,p.y-2,4,4)}
+  else if(p.t==='txt'){txt(p.s,p.x,p.y,U*7,p.col)}
+  else if(p.t==='h'){glow(p.col,10);ctx.strokeStyle=p.col;ctx.lineWidth=3;ctx.beginPath();ctx.arc(p.x,p.y,p.r,p.rot,p.rot+Math.PI);ctx.closePath();ctx.stroke();noGlow()}}
+  ctx.globalAlpha=1}
+
+/* ---------- manos ---------- */
+let hands=[];const pinchState={},prevTip={},trails={};let lastDet=0;
+function toScreen(p){const vw=video.videoWidth||640,vh=video.videoHeight||480,k=Math.max(W/vw,H/vh);let x=p.x*vw*k-(vw*k-W)/2,y=p.y*vh*k-(vh*k-H)/2;if(mirror)x=W-x;return{x,y}}
+function readHands(res,t){
+  const dt=Math.max(.016,(t-lastDet)/1000);lastDet=t;const seen=new Set();hands=[];
+  res.landmarks.forEach((l,i)=>{
+    const k=res.handedness?.[i]?.[0]?.categoryName||String(i);seen.add(k);
+    const s=l.map(toScreen),hs=dist(s[0],s[9])||1,pr=dist(s[4],s[8])/hs;
+    const pinch=pinchState[k]?pr<.55:pr<.32;pinchState[k]=pinch;
+    const curl=[8,12,16,20].reduce((a,j)=>a+dist(s[j],s[0]),0)/4/hs;
+    const tip=s[8],pv=prevTip[k]||tip;prevTip[k]={x:tip.x,y:tip.y};
+    (trails[k]=trails[k]||[]).push({x:tip.x,y:tip.y});if(trails[k].length>9)trails[k].shift();
+    hands.push({k,s,tip,prevTip:pv,v:{x:(tip.x-pv.x)/dt,y:(tip.y-pv.y)/dt},pinch,pp:{x:(s[4].x+tip.x)/2,y:(s[4].y+tip.y)/2},fist:!pinch&&curl<1.25,c:s[9],fresh:true});
+  });
+  for(const k of Object.keys(pinchState))if(!seen.has(k)){delete pinchState[k];delete prevTip[k];delete trails[k]}
+}
+/* dedo en pantalla como mano virtual */
+const ptr={down:false,x:0,y:0,fx:0,fy:0,vx:0,vy:0,t:0,fresh:false};
+function getHands(){const a=hands.slice();if(ptr.down){const p={x:ptr.x,y:ptr.y};a.push({k:'ptr',tip:p,prevTip:{x:ptr.fx,y:ptr.fy},v:{x:ptr.vx,y:ptr.vy},pinch:true,pp:p,fist:false,c:p,fresh:ptr.fresh})}return a}
+cv.addEventListener('pointerdown',e=>{ptr.down=true;ptr.x=ptr.fx=e.clientX;ptr.y=ptr.fy=e.clientY;ptr.t=performance.now();ptr.vx=ptr.vy=0;tapButtons(e.clientX,e.clientY)});
+cv.addEventListener('pointermove',e=>{if(!ptr.down)return;const t=performance.now(),dt=Math.max(.008,(t-ptr.t)/1000);ptr.vx=(e.clientX-ptr.x)/dt;ptr.vy=(e.clientY-ptr.y)/dt;ptr.x=e.clientX;ptr.y=e.clientY;ptr.t=t;ptr.fresh=true;(trails.ptr=trails.ptr||[]).push({x:ptr.x,y:ptr.y});if(trails.ptr.length>9)trails.ptr.shift()});
+const up=()=>{ptr.down=false;delete trails.ptr};
+cv.addEventListener('pointerup',up);cv.addEventListener('pointercancel',up);
+
+function drawHands(){
+  for(const k in trails){const tr=trails[k];if(tr.length<2)continue;ctx.strokeStyle=C;ctx.lineCap='round';
+    for(let i=1;i<tr.length;i++){ctx.globalAlpha=i/tr.length*.7;ctx.lineWidth=(S.game==='cut'&&S.scene==='play'?7:3)*i/tr.length;ctx.beginPath();ctx.moveTo(tr[i-1].x,tr[i-1].y);ctx.lineTo(tr[i].x,tr[i].y);ctx.stroke()}}
+  ctx.globalAlpha=1;
+  for(const h of hands){
+    ctx.strokeStyle='rgba(55,232,255,.35)';ctx.lineWidth=1.5;ctx.beginPath();
+    for(const {start,end} of HandLandmarker.HAND_CONNECTIONS){ctx.moveTo(h.s[start].x,h.s[start].y);ctx.lineTo(h.s[end].x,h.s[end].y)}ctx.stroke();
+    glow(C,12);ctx.fillStyle=h.pinch?'#fff':C;ctx.beginPath();ctx.arc(h.tip.x,h.tip.y,h.pinch?9:6,0,7);ctx.fill();noGlow();
+    if(h.pinch){ctx.strokeStyle='#fff';ctx.lineWidth=2;ctx.beginPath();ctx.arc(h.pp.x,h.pp.y,16,0,7);ctx.stroke()}
+  }
+}
+
+/* ---------- botones (dedo quieto = clic) ---------- */
+let buttons=[];const dwell={id:null,t:0};
+function button(id,x,y,w,h,label,fn,o={}){buttons.push({id,x,y,w,h,label,fn,...o})}
+function hitBtn(x,y){return buttons.find(b=>x>=b.x&&x<=b.x+b.w&&y>=b.y&&y<=b.y+b.h)}
+function tapButtons(x,y){const b=hitBtn(x,y);if(b){ptr.down=false;b.fn()}}
+function updButtons(dt){
+  let hit=null;for(const h of hands){const b=hitBtn(h.tip.x,h.tip.y);if(b){hit=b;break}}
+  if(hit&&dwell.id===hit.id){dwell.t+=dt;if(dwell.t>=(hit.need||.9)){dwell.id=null;dwell.t=0;hit.fn()}}
+  else{dwell.id=hit?hit.id:null;dwell.t=0}
+}
+function drawButtons(){
+  for(const b of buttons){if(b.custom){b.custom(b);continue}
+    const on=dwell.id===b.id;rrect(b.x,b.y,b.w,b.h,12);ctx.fillStyle='rgba(2,20,28,.8)';ctx.fill();
+    glow(C,on?16:6);ctx.strokeStyle=C;ctx.lineWidth=on?2.5:1.5;ctx.stroke();noGlow();
+    if(on){ctx.save();rrect(b.x,b.y,b.w,b.h,12);ctx.clip();ctx.fillStyle='rgba(55,232,255,.25)';ctx.fillRect(b.x,b.y,b.w*dwell.t/(b.need||.9),b.h);ctx.restore()}
+    txt(b.label,b.x+b.w/2,b.y+b.h/2+1,Math.min(22,b.h*.42),C)}
+}
+
+/* ---------- JUEGO 1: cortar ---------- */
+const cut={
+  init(){this.items=[];this.score=0;this.lives=3;this.t=0;this.next=.8;this.over=false},
+  spawn(){const r=U*7,x=W*rnd(.15,.85),h=H*rnd(.5,.82),g=H*1.25,bomb=Math.random()<Math.min(.3,.12+this.t*.003);
+    this.items.push({x,y:H+r,r,vx:(W/2-x)*rnd(.2,.6),vy:-Math.sqrt(2*g*h),rot:0,vr:rnd(-3,3),n:[0,3,4,6][Math.random()*4|0],bomb,col:bomb?RED:[C,YEL,MAG,GRN][Math.random()*4|0]})},
+  update(dt){const g=H*1.25;this.t+=dt;this.next-=dt;
+    if(this.next<=0){let k=1;if(Math.random()<Math.min(.6,this.t/60))k++;if(this.t>45&&Math.random()<.3)k++;for(let i=0;i<k;i++)this.spawn();this.next=Math.max(.55,1.4-this.t*.015)}
+    for(const h of getHands()){if(!h.fresh||Math.hypot(h.v.x,h.v.y)<U*90)continue;
+      for(const it of this.items){if(it.dead||segDist(h.prevTip,h.tip,it)>it.r*1.15)continue;it.dead=true;
+        if(it.bomb){this.lives--;flash=.45;burst(it.x,it.y,RED,36)}
+        else{this.score++;burst(it.x,it.y,it.col,16);pop(it.x,it.y-it.r,'+1',it.col);
+          const a=Math.atan2(h.v.y,h.v.x);for(const sd of[-1,1])parts.push({t:'h',x:it.x,y:it.y,vx:it.vx+Math.cos(a+Math.PI/2)*sd*U*30,vy:it.vy*.3+Math.sin(a+Math.PI/2)*sd*U*30,r:it.r,col:it.col,rot:a+(sd>0?0:Math.PI),vr:sd*4,life:.9})}}}
+    for(const it of this.items){it.vy+=g*dt;it.x+=it.vx*dt;it.y+=it.vy*dt;it.rot+=it.vr*dt;
+      if(!it.dead&&it.vy>0&&it.y>H+it.r){it.dead=true;if(!it.bomb){this.lives--;flash=.25}}}
+    this.items=this.items.filter(it=>!it.dead);if(this.lives<=0)this.over=true},
+  draw(){for(const it of this.items){glow(it.col,16);ctx.strokeStyle=it.col;ctx.lineWidth=3;poly(it.x,it.y,it.r,it.n,it.rot);ctx.stroke();
+      ctx.globalAlpha=.45;ctx.lineWidth=1.5;poly(it.x,it.y,it.r*.55,it.n,-it.rot);ctx.stroke();ctx.globalAlpha=1;
+      if(it.bomb){ctx.lineWidth=3;const d=it.r*.45;ctx.beginPath();ctx.moveTo(it.x-d,it.y-d);ctx.lineTo(it.x+d,it.y+d);ctx.moveTo(it.x+d,it.y-d);ctx.lineTo(it.x-d,it.y+d);ctx.stroke()}noGlow()}},
+  hint:'Corta con el dedo índice rápido · evita las rojas'
+};
+
+/* ---------- JUEGO 2: atrapa y lanza ---------- */
+const thr={
+  init(){this.score=0;this.time=60;this.over=false;this.home();this.targets=[0,1,2].map(()=>this.newT())},
+  home(){this.orb={x:W/2,y:H*.8,r:U*5.5,vx:0,vy:0,st:'idle',key:null,hist:[]}},
+  newT(){const small=Math.random()<.35,r=U*(small?5:8.5);return{x:W*rnd(.2,.8),y:H*rnd(.15,.45),r,vx:rnd(-1,1)*U*35,vy:rnd(-1,1)*U*18,small}},
+  update(dt){this.time-=dt;if(this.time<=0){this.time=0;this.over=true;return}
+    for(const t of this.targets){t.x+=t.vx*dt;t.y+=t.vy*dt;if(t.x<t.r||t.x>W-t.r)t.vx*=-1;if(t.y<t.r+U*12||t.y>H*.58)t.vy*=-1;t.x=clamp(t.x,t.r,W-t.r);t.y=clamp(t.y,t.r+U*12,H*.58)}
+    const o=this.orb,hs=getHands();
+    if(o.st==='idle')for(const h of hs)if(h.pinch&&dist(h.pp,o)<o.r*3.2){o.st='held';o.key=h.k;o.hist=[];break}
+    if(o.st==='held'){const h=hs.find(q=>q.k===o.key);
+      if(h&&h.pinch){o.x+=(h.pp.x-o.x)*.6;o.y+=(h.pp.y-o.y)*.6;o.hist.push({x:o.x,y:o.y,t:now});while(o.hist.length>2&&now-o.hist[0].t>130)o.hist.shift()}
+      else{const a=o.hist[0],b=o.hist[o.hist.length-1];let vx=0,vy=0;if(a&&b&&b.t>a.t){const s=(b.t-a.t)/1000;vx=(b.x-a.x)/s;vy=(b.y-a.y)/s}
+        if(Math.hypot(vx,vy)>U*50){o.vx=vx*1.3;o.vy=vy*1.3;o.st='fly'}else o.st='idle'}}
+    if(o.st==='fly'){o.x+=o.vx*dt;o.y+=o.vy*dt;const f=Math.pow(.75,dt);o.vx*=f;o.vy*=f;
+      for(const t of this.targets)if(dist(o,t)<o.r+t.r){const p=t.small?3:1;this.score+=p;burst(t.x,t.y,t.small?YEL:C,30);pop(t.x,t.y,'+'+p,t.small?YEL:C);Object.assign(t,this.newT());this.home();return}
+      if(o.x<-o.r*2||o.x>W+o.r*2||o.y<-o.r*2||o.y>H+o.r*2||Math.hypot(o.vx,o.vy)<U*12)this.home()}},
+  draw(){for(const t of this.targets){const col=t.small?YEL:C;glow(col,14);ctx.strokeStyle=col;
+      for(let i=1;i<=3;i++){ctx.lineWidth=i===3?3:1.5;ctx.globalAlpha=i===3?1:.6;ctx.beginPath();ctx.arc(t.x,t.y,t.r*i/3,0,7);ctx.stroke()}ctx.globalAlpha=1;noGlow()}
+    const o=this.orb;if(o.st==='idle'){ctx.strokeStyle='rgba(55,232,255,.3)';ctx.setLineDash([6,6]);ctx.beginPath();ctx.arc(o.x,o.y,o.r*3.2,0,7);ctx.stroke();ctx.setLineDash([])}
+    const g=ctx.createRadialGradient(o.x,o.y,0,o.x,o.y,o.r);g.addColorStop(0,'#fff');g.addColorStop(.4,C);g.addColorStop(1,'rgba(55,232,255,0)');
+    glow(C,24);ctx.fillStyle=g;ctx.beginPath();ctx.arc(o.x,o.y,o.r*1.3,0,7);ctx.fill();noGlow();
+    if(o.st==='held'){ctx.strokeStyle='#fff';ctx.lineWidth=2;ctx.beginPath();ctx.arc(o.x,o.y,o.r*1.7,0,7);ctx.stroke()}},
+  hint:'Pellizca el orbe, arrástralo rápido y suéltalo'
+};
+
+/* ---------- JUEGO 3: escudo ---------- */
+const shd={
+  init(){this.shots=[];this.score=0;this.lives=3;this.t=0;this.next=1.2;this.over=false;this.sh=[]},
+  shields(){const E=U*20;return getHands().filter(h=>!h.fist).map(h=>{const p=h.c;return{x:p.x,y:p.y,r:U*11,on:Math.hypot(p.x-W/2,p.y-H/2)>E}})},
+  spawn(){const a=Math.random()*Math.PI*2,R=Math.hypot(W,H)/2+U*5,sp=U*(22+this.t*.9)*rnd(.8,1.2);this.shots.push({x:W/2+Math.cos(a)*R,y:H/2+Math.sin(a)*R,vx:-Math.cos(a)*sp,vy:-Math.sin(a)*sp,r:U*2.2})},
+  update(dt){this.t+=dt;this.next-=dt;if(this.next<=0){this.spawn();if(this.t>30&&Math.random()<.3)this.spawn();this.next=Math.max(.35,1.3-this.t*.02)}
+    const S=this.sh=this.shields(),cx=W/2,cy=H/2,cr=U*6;
+    for(const s of this.shots){s.x+=s.vx*dt;s.y+=s.vy*dt;
+      for(const q of S)if(q.on&&Math.hypot(s.x-q.x,s.y-q.y)<q.r+s.r){s.dead=true;this.score++;burst(s.x,s.y,C,14);break}
+      if(!s.dead&&Math.hypot(s.x-cx,s.y-cy)<cr+s.r){s.dead=true;this.lives--;flash=.45;burst(cx,cy,RED,30)}}
+    this.shots=this.shots.filter(s=>!s.dead);if(this.lives<=0)this.over=true},
+  draw(){const cx=W/2,cy=H/2,cr=U*6,p=1+Math.sin(now/300)*.08;
+    ctx.strokeStyle='rgba(55,232,255,.25)';ctx.setLineDash([5,7]);ctx.beginPath();ctx.arc(cx,cy,U*20,0,7);ctx.stroke();ctx.setLineDash([]);
+    glow(C,20);ctx.strokeStyle=C;ctx.lineWidth=3;ctx.beginPath();ctx.arc(cx,cy,cr*p,0,7);ctx.stroke();ctx.fillStyle='rgba(55,232,255,.35)';ctx.beginPath();ctx.arc(cx,cy,cr*.5*p,0,7);ctx.fill();noGlow();
+    for(const s of this.shots){ctx.strokeStyle='rgba(255,77,109,.4)';ctx.lineWidth=s.r;ctx.beginPath();ctx.moveTo(s.x,s.y);ctx.lineTo(s.x-s.vx*.12,s.y-s.vy*.12);ctx.stroke();glow(RED,12);ctx.fillStyle=ORA;ctx.beginPath();ctx.arc(s.x,s.y,s.r,0,7);ctx.fill();noGlow()}
+    for(const q of this.sh){glow(q.on?C:RED,q.on?22:6);ctx.strokeStyle=q.on?C:'rgba(255,77,109,.6)';ctx.lineWidth=q.on?4:2;ctx.beginPath();ctx.arc(q.x,q.y,q.r,0,7);ctx.stroke();
+      if(q.on){ctx.fillStyle='rgba(55,232,255,.12)';ctx.fill()}noGlow()}},
+  hint:'Abre la mano para bloquear · no tapes el núcleo'
+};
+
+/* ---------- JUEGO 4: armar el reactor ---------- */
+const rea={
+  init(){this.time=0;this.over=false;this.win=false;this.held=null;this.score=0;const R=U*20,cx=W/2,cy=H/2;
+    this.slots=[0,3,4,5,6,8].map((n,i)=>{const a=i/6*Math.PI*2-Math.PI/2;return{x:cx+Math.cos(a)*R,y:cy+Math.sin(a)*R,n,col:COLS[i]}});
+    this.pieces=[];const m=U*9;
+    for(let i=0;i<6;i++){let p,tries=0;do{p={x:rnd(m,W-m),y:rnd(U*18,H-U*12)};tries++}while(tries<80&&(Math.hypot(p.x-cx,p.y-cy)<R+U*14||this.pieces.some(q=>dist(p,q)<U*14)));
+      this.pieces.push({...p,n:this.slots[i].n,col:this.slots[i].col,slot:i,placed:false,rot:rnd(0,6)})}},
+  update(dt){this.time+=dt;const hs=getHands(),r=U*6;
+    for(const p of this.pieces)if(!p.placed)p.rot+=dt*.6;
+    if(!this.held)for(const h of hs){if(!h.pinch)continue;const p=this.pieces.filter(q=>!q.placed).sort((a,b)=>dist(a,h.pp)-dist(b,h.pp))[0];if(p&&dist(p,h.pp)<r*2.3){this.held={p,k:h.k};break}}
+    if(this.held){const h=hs.find(q=>q.k===this.held.k),p=this.held.p;
+      if(h&&h.pinch){p.x+=(h.pp.x-p.x)*.6;p.y+=(h.pp.y-p.y)*.6}
+      else{const s=this.slots[p.slot];if(dist(p,s)<U*7){p.placed=true;p.x=s.x;p.y=s.y;p.rot=0;burst(s.x,s.y,s.col,22)}else if(this.slots.some(q=>dist(p,q)<U*7)){flash=.15}this.held=null}}
+    if(this.pieces.every(p=>p.placed)){this.over=true;this.win=true;this.score=Math.round(this.time*10)/10;burst(W/2,H/2,C,70)}},
+  draw(){const cx=W/2,cy=H/2,R=U*20,r=U*6,done=this.pieces.filter(p=>p.placed).length;
+    glow(C,done*4);ctx.strokeStyle=`rgba(55,232,255,${.25+done*.12})`;ctx.lineWidth=2+done;ctx.beginPath();ctx.arc(cx,cy,R,0,7);ctx.stroke();
+    ctx.fillStyle=`rgba(55,232,255,${done/6*.5})`;ctx.beginPath();ctx.arc(cx,cy,R*.45,0,7);ctx.fill();noGlow();
+    for(const s of this.slots){ctx.strokeStyle=s.col;ctx.globalAlpha=.55;ctx.lineWidth=1.5;ctx.setLineDash([4,5]);poly(s.x,s.y,r,s.n);ctx.stroke();ctx.setLineDash([]);ctx.globalAlpha=1}
+    for(const p of this.pieces){const held=this.held&&this.held.p===p;glow(p.col,held||p.placed?22:10);ctx.strokeStyle=p.col;ctx.lineWidth=3;poly(p.x,p.y,r*(held?1.15:1),p.n,p.rot);ctx.stroke();
+      ctx.globalAlpha=p.placed?.5:.18;ctx.fillStyle=p.col;ctx.fill();ctx.globalAlpha=1;noGlow()}},
+  hint:'Pellizca cada pieza y suéltala en su hueco'
+};
+
+/* ---------- escenas ---------- */
+const games={cut,thr,shd,rea};
+const meta={cut:['Cortar hologramas','Corta con el índice. Evita las rojas.'],thr:['Atrapa y lanza','Pellizca el orbe y lánzalo. 60 s.'],shd:['Escudo de energía','Abre la mano y bloquea los disparos.'],rea:['Armar el reactor','Lleva cada pieza a su hueco.']};
+const S={scene:'menu',game:null,t:0,rec:false};
+function play(id){S.game=id;S.scene='play';S.t=0;parts=[];games[id].init()}
+function toMenu(){S.scene='menu';S.game=null;parts=[]}
+function bestTxt(id){const b=getBest(id);if(b==null)return'Sin récord';return id==='rea'?`Mejor: ${b.toFixed(1)} s`:`Récord: ${b}`}
+
+function icon(id,x,y,r){ctx.strokeStyle=C;ctx.lineWidth=2.5;glow(C,12);
+  if(id==='cut'){poly(x,y,r,6,.3);ctx.stroke();ctx.strokeStyle='#fff';ctx.beginPath();ctx.moveTo(x-r*1.3,y+r*.9);ctx.lineTo(x+r*1.3,y-r*.9);ctx.stroke()}
+  if(id==='thr'){ctx.beginPath();ctx.arc(x+r*.5,y-r*.3,r*.7,0,7);ctx.stroke();ctx.beginPath();ctx.arc(x+r*.5,y-r*.3,r*.3,0,7);ctx.stroke();ctx.fillStyle=C;ctx.beginPath();ctx.arc(x-r*.8,y+r*.6,r*.3,0,7);ctx.fill()}
+  if(id==='shd'){ctx.beginPath();ctx.arc(x,y,r*.35,0,7);ctx.stroke();ctx.lineWidth=4;ctx.beginPath();ctx.arc(x,y,r,-2.2,-.9);ctx.stroke();ctx.fillStyle=ORA;ctx.beginPath();ctx.arc(x+r*1.1,y-r*1.1,r*.18,0,7);ctx.fill()}
+  if(id==='rea'){ctx.beginPath();ctx.arc(x,y,r,0,7);ctx.stroke();for(let i=0;i<6;i++){const a=i/6*Math.PI*2;ctx.fillStyle=COLS[i];ctx.beginPath();ctx.arc(x+Math.cos(a)*r,y+Math.sin(a)*r,r*.2,0,7);ctx.fill()}}
+  noGlow()}
+
+function drawMenu(){
+  const land=W>H*1.2,g=U*3,top=land?H*.2:H*.17;
+  glow(C,18);txt('Holo Arcade',W/2,top*.5,clamp(U*11,32,52),C);noGlow();
+  wrapTxt('Deja el dedo índice quieto sobre un juego para elegirlo',W/2,top*.5+clamp(U*9,30,42),W*.88,clamp(U*4,14,17));
+  const ids=['cut','thr','shd','rea'],cols=land?4:2,rows=land?1:2;
+  const bw=(W-g*(cols+1))/cols,availH=H-top-U*22,bh=Math.min(land?bw*1.15:bw*1.05,(availH-g*(rows-1))/rows);
+  const y0=top+g+(availH-(bh*rows+g*(rows-1)))/2;
+  ids.forEach((id,i)=>{const cx=i%cols,cy=i/cols|0,x=g+cx*(bw+g),y=y0+cy*(bh+g);
+    button(id,x,y,bw,bh,'',()=>play(id),{need:1,custom:b=>{const on=dwell.id===b.id;rrect(b.x,b.y,b.w,b.h,16);ctx.fillStyle=on?'rgba(10,50,62,.9)':'rgba(2,20,28,.78)';ctx.fill();
+      glow(C,on?20:6);ctx.strokeStyle=C;ctx.lineWidth=on?3:1.5;ctx.stroke();noGlow();
+      if(on){ctx.save();rrect(b.x,b.y,b.w,b.h,16);ctx.clip();ctx.fillStyle='rgba(55,232,255,.22)';const f=dwell.t/b.need;ctx.fillRect(b.x,b.y+b.h*(1-f),b.w,b.h*f);ctx.restore()}
+      const ir=Math.min(b.w,b.h)*.14;icon(id,b.x+b.w/2,b.y+b.h*.3,ir);
+      const fs=clamp(b.w*.1,15,24);txt(meta[id][0],b.x+b.w/2,b.y+b.h*.58,fs,WHT);
+      wrapTxt(meta[id][1],b.x+b.w/2,b.y+b.h*.72,b.w*.86,clamp(fs*.68,12,16));
+      txt(bestTxt(id),b.x+b.w/2,b.y+b.h*.9,clamp(fs*.68,12,16),YEL,'center',500)}})});
+  const hw=Math.min(240,W*.6);button('holo',(W-hw)/2,H-U*14-Math.max(0,0),hw,46,'Ir al holograma',()=>{location.href='../'},{need:1.2});
+}
+function wrapTxt(s,x,y,maxW,sz){ctx.font=`500 ${sz}px Rajdhani,system-ui,sans-serif`;const w=s.split(' ');let line='',lines=[];for(const word of w){const t=line?line+' '+word:word;if(ctx.measureText(t).width>maxW&&line){lines.push(line);line=word}else line=t}lines.push(line);lines=lines.slice(0,2);
+  lines.forEach((l,i)=>txt(l,x,y+(i-(lines.length-1)/2)*sz*1.15,sz,'rgba(216,251,255,.75)','center',500))}
+
+function hud(g){
+  const pad=Math.max(12,U*3);button('exit',pad,pad,96,44,'Menú',toMenu,{need:1.3});
+  const id=S.game;
+  if(id==='rea')txt(g.time.toFixed(1)+' s',W-pad,pad+22,30,WHT,'right');
+  else txt(String(g.score),W-pad,pad+22,34,WHT,'right');
+  if(g.lives!=null)for(let i=0;i<3;i++){ctx.beginPath();ctx.arc(W/2-24+i*24,pad+22,7,0,7);if(i<g.lives){glow(RED,10);ctx.fillStyle=RED;ctx.fill();noGlow()}else{ctx.strokeStyle='rgba(255,77,109,.5)';ctx.lineWidth=1.5;ctx.stroke()}}
+  if(id==='thr')txt(Math.ceil(g.time)+' s',W/2,pad+22,24,g.time<10?RED:WHT);
+  if(S.t<5&&S.scene==='play'){ctx.globalAlpha=clamp(5-S.t,0,1);rrect(W*.04,H-U*18,W*.92,48,10);ctx.fillStyle='rgba(2,20,28,.75)';ctx.fill();wrapTxt(g.hint,W/2,H-U*18+24,W*.86,clamp(U*4.2,14,18));ctx.globalAlpha=1}
+}
+function finish(){const id=S.game,g=games[id];S.scene='over';S.rec=false;
+  if(id==='rea'&&!g.win)return;const b=getBest(id),v=g.score;
+  if(b==null||(id==='rea'?v<b:v>b)){setBest(id,v);S.rec=b!=null||v>0}}
+function drawOver(){const g=games[S.game],id=S.game;
+  ctx.fillStyle='rgba(2,7,11,.72)';ctx.fillRect(0,0,W,H);
+  glow(C,18);txt(id==='rea'?'¡Reactor armado!':(id==='thr'?'¡Tiempo!':'Fin del juego'),W/2,H*.3,clamp(U*10,30,48),C);noGlow();
+  txt(id==='rea'?`Tiempo: ${g.score.toFixed(1)} s`:`Puntos: ${g.score}`,W/2,H*.3+clamp(U*12,40,60),clamp(U*7,22,32),WHT);
+  txt(S.rec?'¡Nuevo récord!':bestTxt(id),W/2,H*.3+clamp(U*20,66,96),clamp(U*5,16,22),YEL,'center',500);
+  const bw=Math.min(220,W*.4),gap=U*4,y=H*.6;
+  button('again',W/2-bw-gap/2,y,bw,56,'Otra vez',()=>play(id),{need:1});
+  button('menu',W/2+gap/2,y,bw,56,'Menú',toMenu,{need:1});
+}
+
+/* ---------- bucle principal ---------- */
+let lastVT=-1,last=performance.now();
+function frame(t){requestAnimationFrame(frame);now=t;const dt=Math.min(.05,(t-last)/1000);last=t;
+  if(ready&&lm&&video.readyState>=2&&video.currentTime!==lastVT){lastVT=video.currentTime;try{readHands(lm.detectForVideo(video,t),t)}catch(e){console.log(e)}}
+  ctx.clearRect(0,0,W,H);buttons=[];
+  if(S.scene==='menu')drawMenu();
+  else{const g=games[S.game];if(S.scene==='play'){S.t+=dt;g.update(dt);if(g.over)finish()}g.draw();hud(g)}
+  updParts(dt);drawParts();
+  if(S.scene==='over')drawOver();
+  updButtons(dt);drawButtons();drawHands();
+  if(flash>0){ctx.fillStyle=`rgba(255,77,109,${flash*.5})`;ctx.fillRect(0,0,W,H);flash-=dt}
+  for(const h of hands)h.fresh=false;ptr.fresh=false;ptr.fx=ptr.x;ptr.fy=ptr.y;
+  if(!ptr.down)ptr.vx=ptr.vy=0;
+}
+requestAnimationFrame(frame);
+
+/* ---------- cámara ---------- */
+function fail(m){$('err').textContent=m;$('err').classList.remove('hide');$('start').disabled=false;$('start').textContent='Reintentar'}
+async function start(){
+  $('start').disabled=true;$('start').textContent='Cargando…';$('err').classList.add('hide');
+  if(!navigator.mediaDevices?.getUserMedia){fail('Este navegador no deja usar la cámara aquí. Abre la página desde https:// en Chrome o Safari.');return}
+  try{const st=await navigator.mediaDevices.getUserMedia({video:{facingMode:'user',width:{ideal:640},height:{ideal:480}},audio:false});video.srcObject=st;await video.play()}
+  catch(e){fail('No pude abrir la cámara ('+e.name+'). Revisa el permiso.');return}
+  try{const fs=await FilesetResolver.forVisionTasks(WASM);const o=d=>({baseOptions:{modelAssetPath:MODEL,delegate:d},runningMode:'VIDEO',numHands:2});
+    try{lm=await HandLandmarker.createFromOptions(fs,o('GPU'))}catch(e){lm=await HandLandmarker.createFromOptions(fs,o('CPU'))}}
+  catch(e){fail('No pude cargar el modelo de manos. Revisa tu conexión.');return}
+  ready=true;$('intro').classList.add('hide');
+}
+$('start').onclick=start;
+$('touch').onclick=()=>{$('intro').classList.add('hide');video.classList.add('hide')};
+}
+</script>
+</body>
+</html>
