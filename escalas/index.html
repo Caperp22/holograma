@@ -56,6 +56,7 @@ button.on{background:rgba(55,232,255,.25)}
 <div id="track"><canvas id="tr"></canvas></div>
 <div id="panel">
   <div id="info"><div id="iName"></div><div id="iSize"></div><div id="iFact"></div></div>
+  <button id="bTrip" class="hide" style="border-color:#ffd23f;color:#ffd23f">◀ Volver al viaje</button>
   <button id="bEnter" class="hide" style="border-color:#ffd23f;color:#ffd23f">Entrar con imágenes reales ▶</button>
   <div class="row">
     <button id="bSmall">◀ Más pequeño</button>
@@ -225,14 +226,55 @@ const SUP={'-':'⁻','0':'⁰','1':'¹','2':'²','3':'³','4':'⁴','5':'⁵','6
 const expTxt=e=>'10'+String(e).split('').map(c=>SUP[c]).join('')+' m';
 
 /* ---------- estado del zoom ---------- */
-let z=L[7].z,zt=z,auto=null,lastLevel=-1;
-const clampZ=v=>Math.max(ZMIN,Math.min(ZMAX,v));
-function nearest(){let b=0;for(let i=1;i<L.length;i++)if(Math.abs(L[i].z-z)<Math.abs(L[b].z-z))b=i;return b}
-function jump(dir){stopAuto();const n=nearest();let i=n+dir;if(dir<0&&L[n].z<z-.05)i=n;if(dir>0&&L[n].z>z+.05)i=n;i=Math.max(0,Math.min(L.length-1,i));zt=L[i].z}
+let LV=L,LVmin=ZMIN,LVmax=ZMAX,stack=[],branchName=null,exploring=null;
+let z=LV[7].z,zt=z,auto=null,lastLevel=-1;
+const clampZ=v=>Math.max(LVmin,Math.min(LVmax,v));
+function nearest(){let b=0;for(let i=1;i<LV.length;i++)if(Math.abs(LV[i].z-z)<Math.abs(LV[b].z-z))b=i;return b}
+function jump(dir){stopAuto();const n=nearest();let i=n+dir;if(dir<0&&LV[n].z<z-.05)i=n;if(dir>0&&LV[n].z>z+.05)i=n;i=Math.max(0,Math.min(LV.length-1,i));zt=LV[i].z}
 function stopAuto(){auto=null;$('bAuto').classList.remove('on');$('bAuto').textContent='Viaje automático'}
 $('bSmall').onclick=()=>jump(-1);$('bBig').onclick=()=>jump(1);
-$('bAuto').onclick=()=>{if(auto){stopAuto();return}auto={phase:z>L[0].z+.5?'in':'out'};$('bAuto').classList.add('on');$('bAuto').textContent='Detener'};
+$('bAuto').onclick=()=>{if(auto){stopAuto();return}auto={phase:z>LV[0].z+.5?'in':'out'};$('bAuto').classList.add('on');$('bAuto').textContent='Detener'};
 $('bMenu').onclick=()=>{location.href='../'};document.querySelectorAll('.goHome').forEach(b=>b.onclick=()=>{location.href='../'});
+
+/* ---------- ramas: cosas a las que puedes entrar desde un nivel ---------- */
+const FP='https://commons.wikimedia.org/wiki/Special:FilePath/';
+function photoLevel(z,name,fact,src,credit){const im=new Image();im.decoding='async';im.referrerPolicy='no-referrer';im.src=src;
+  return{z,name,fact,photo:{src,w:.95,shape:'round',credit,img:im},draw(u){glow(C,20);circ(0,0,u*.3,C,'rgba(55,232,255,.06)',2);noGlow();label('Cargando foto…',0,0,LS(u),C)}}}
+const BR={
+ andromeda:{name:'Andrómeda',levels:[photoLevel(21.35,'Galaxia de Andrómeda','La galaxia grande más cercana: mide más de 150.000 años luz, tiene alrededor de un billón de estrellas y está a 2,5 millones de años luz.',FP+'Andromeda_galaxy_2.jpg?width=1200','Foto real del telescopio GALEX: NASA/JPL-Caltech, dominio público')]},
+ orion:{name:'Nebulosa de Orión',levels:[photoLevel(17.45,'Nebulosa de Orión','Una nube de gas donde están naciendo estrellas. Está a unos 1.344 años luz, mide unos 24 años luz y se ve a simple vista en la constelación de Orión.','https://upload.wikimedia.org/wikipedia/commons/thumb/0/07/Orion_Nebula_-_Hubble_2006_mosaic.jpg/1024px-Orion_Nebula_-_Hubble_2006_mosaic.jpg','Foto real del telescopio Hubble: NASA, ESA, M. Robberto y el equipo Orion Treasury Project')]},
+ hudf:{name:'Campo Ultra Profundo',levels:[photoLevel(25.6,'Campo Ultra Profundo del Hubble','Un pedacito de cielo unas 13 veces más angosto que la Luna llena, con unas 10.000 galaxias. La luz de algunas salió hace más de 13.000 millones de años.',FP+'Hubble_ultra_deep_field.jpg?width=1200','Foto real del telescopio Hubble: NASA y ESA')]},
+ sangre:{name:'Glóbulo rojo',levels:[photoLevel(-4.75,'Glóbulo rojo, plaqueta y glóbulo blanco','De izquierda a derecha: un glóbulo rojo, una plaqueta y un glóbulo blanco. Los glóbulos rojos llevan el oxígeno, no tienen núcleo y viven unos 120 días.',FP+'Red_White_Blood_cells.jpg?width=1200','Foto real (microscopio electrónico): NCI-Frederick, dominio público')]},
+};
+const byName=n=>L.find(l=>l.name===n);
+byName('Universo observable').spots=()=>[{x:.2,y:-.14,r:.06,label:'Campo Ultra Profundo',go:{branch:'hudf'}}];
+byName('Grupo Local').spots=()=>[{x:.14,y:-.06,r:.09,label:'Andrómeda',go:{branch:'andromeda'}}];
+byName('Vía Láctea').spots=()=>[{x:-.02,y:.1,r:.05,label:'Nebulosa de Orión',go:{branch:'orion'}}];
+byName('Estrellas vecinas').spots=()=>[{x:0,y:0,r:.05,label:'Sol y planetas',go:{explore:'sistema'}}];
+byName('Sistema solar').spots=t=>{const au=1/(1e13/1.496e11),pl=[['Júpiter',5.2,4,'jupiter'],['Saturno',9.5,5,'saturno'],['Urano',19.2,6,'urano'],['Neptuno',30.1,7,'neptuno']];
+  return [{x:0,y:0,r:.035,label:'Sol',go:{explore:'sol'}},...pl.map(([n,d,i,id])=>{const a=t*.6/Math.sqrt(d)+i*1.7;return{x:Math.cos(a)*d*au,y:Math.sin(a)*d*au,r:.03,label:n,go:{explore:id}}})]};
+byName('La Tierra y la Luna').spots=t=>{const a=t*.15;return[{x:-.2,y:0,r:.04,label:'Tierra',go:{explore:'tierra'}},{x:-.2+Math.cos(a)*.427,y:Math.sin(a)*.427,r:.04,label:'Luna',go:{explore:'luna'}}]};
+byName('La Tierra').spots=()=>[{x:0,y:0,r:.3,label:'Entrar a la Tierra',go:{explore:'tierra'}}];
+byName('Colombia').spots=()=>{const k=111/2240;return[['Bogotá',-74.07,4.71],['Medellín',-75.57,6.25],['Cali',-76.53,3.45],['Barranquilla',-74.8,10.96],['Cartagena',-75.5,10.4]].map(([n,lo,la])=>({x:(lo+73)*k,y:-(la-4.2)*k,r:.028,label:n,go:{explore:`mapa=${la},${lo},12`}}))};
+byName('Ciudad').spots=()=>[{x:0,y:0,r:.12,label:'Ver una ciudad real',go:{explore:'mapa=4.65,-74.08,11'}}];
+byName('Células de la sangre').spots=()=>[{x:0,y:0,r:.12,label:'Glóbulo rojo de cerca',go:{branch:'sangre'}}];
+
+let spotsNow=[];
+function spotAt(x,y){let b=null,bd=1e9;for(const q of spotsNow){const d=Math.hypot(q.px-x,q.py-y);if(d<q.pr+10&&d<bd){bd=d;b=q}}return b}
+function drawSpots(t){const shown=[];for(const q of spotsNow){const pulse=.6+.4*Math.sin(t/300);
+  ctx.save();ctx.setLineDash([5,5]);ctx.strokeStyle=`rgba(255,210,63,${.5+.4*pulse})`;ctx.lineWidth=2;ctx.beginPath();ctx.arc(q.px,q.py,q.pr,0,7);ctx.stroke();ctx.restore();
+  const ly=q.py+q.pr+12;if(shown.some(o=>Math.abs(o.x-q.px)<70&&Math.abs(o.y-ly)<16))continue;shown.push({x:q.px,y:ly});label(q.label+' ▸',q.px,ly,13,Y)}}
+function go(q){if(q.go.branch)enterBranch(q.go.branch);else openExplore(q.go.explore)}
+function setBranchUI(){const inB=stack.length>0;$('bTrip').classList.toggle('hide',!inB);$('bAuto').classList.toggle('hide',inB);
+  $('title').textContent=inB?'Viaje › '+branchName:'Viaje de escalas';lastLevel=-1}
+function enterBranch(id){const b=BR[id];stopAuto();stack.push({LV,LVmin,LVmax,z,name:branchName});
+  LV=b.levels;LVmin=LV[0].z-.8;LVmax=LV[LV.length-1].z+1;branchName=b.name;z=LVmax-.15;zt=LV[LV.length-1].z;setBranchUI()}
+function exitBranch(){const s=stack.pop();if(!s)return;LV=s.LV;LVmin=s.LVmin;LVmax=s.LVmax;branchName=s.name;z=s.z;zt=Math.min(LVmax,s.z+.12);setBranchUI()}
+$('bTrip').onclick=()=>{zt=LVmax;exitBranch()};
+// planetas, Luna y mapa satelital: se abren encima del viaje y al salir vuelves al mismo punto
+function openExplore(hash){if(exploring)return;stopAuto();const f=document.createElement('iframe');f.src='../explorar/?embed=1#'+hash;
+  f.style.cssText='position:fixed;inset:0;width:100%;height:100%;border:0;z-index:9;background:#010306';f.allow='fullscreen';document.body.appendChild(f);exploring=f;hands=[]}
+addEventListener('message',e=>{if(e.data&&e.data.type==='explore-close'&&exploring){exploring.remove();exploring=null;lastLevel=-1}});
 
 /* ---------- dibujo principal ---------- */
 const stars=(()=>{const r=rng(1);return Array.from({length:140},()=>[r(),r(),r()])})();
@@ -240,38 +282,41 @@ function render(t){
   ctx.clearRect(0,0,VW,VH);
   const top=110,bot=$('panel').getBoundingClientRect().top,wide=VW>=700,cx=wide?(VW-440)/2:VW/2,cy=wide?VH/2:(top+bot)/2,base=Math.min(wide?VW-460:VW-60,(wide?VH:bot-top)-20);
   for(const [x,y,s] of stars){ctx.fillStyle=`rgba(216,251,255,${.15+s*.3})`;const px=((x*VW+(z*37*s))%VW+VW)%VW;ctx.fillRect(px,y*VH,1.2,1.2)}
-  let i=0;while(i<L.length-2&&z>L[i+1].z)i++;
-  const a=L[i],b=L[i+1],f=Math.max(0,Math.min(1,(z-a.z)/(b.z-a.z))),sm=f*f*(3-2*f);
-  const draws=[[i,1-sm],[i+1,sm]];if(z<L[0].z)draws.splice(1,1);if(z>L[L.length-1].z)draws.splice(0,1);
-  for(const [j,al] of draws){if(al<.02)continue;const s=Math.pow(10,(L[j].z-z)*.75),u=base*s;if(u>base*60||u<2)continue;
-    ctx.save();ctx.translate(cx,cy);ctx.globalAlpha=al;drawScene(L[j],u,t/1000);ctx.restore()}
+  let draws;if(LV.length===1)draws=[[0,1]];else{let i=0;while(i<LV.length-2&&z>LV[i+1].z)i++;
+  const a=LV[i],b=LV[i+1],f=Math.max(0,Math.min(1,(z-a.z)/(b.z-a.z))),sm=f*f*(3-2*f);
+  draws=[[i,1-sm],[i+1,sm]];if(z<LV[0].z)draws.splice(1,1);if(z>LV[LV.length-1].z)draws.splice(0,1)}
+  let bestD=null;
+  for(const [j,al] of draws){if(al<.02)continue;const s=Math.pow(10,(LV[j].z-z)*.75),u=base*s;if(u>base*60||u<2)continue;
+    ctx.save();ctx.translate(cx,cy);ctx.globalAlpha=al;drawScene(LV[j],u,t/1000);ctx.restore();if(!bestD||al>bestD.al)bestD={j,al,u}}
+  spotsNow=bestD&&bestD.al>.55&&bestD.u>base*.35&&bestD.u<base*3&&LV[bestD.j].spots?LV[bestD.j].spots(t/1000).map(q=>({...q,px:cx+q.x*bestD.u,py:cy+q.y*bestD.u,pr:Math.max(24,(q.r||.05)*bestD.u)})):[];
+  drawSpots(t);
   ctx.globalAlpha=1;
   // regla de escala
   const rw=base*.3,rx=cx-rw/2,ry=Math.min(bot-18,cy+base*.5+4);ctx.strokeStyle=Y;ctx.lineWidth=2;ctx.beginPath();ctx.moveTo(rx,ry-5);ctx.lineTo(rx,ry);ctx.lineTo(rx+rw,ry);ctx.lineTo(rx+rw,ry-5);ctx.stroke();
   const fw=Math.pow(10,z)*(rw/base);label(fmtLen(fw),cx,ry-12,13,Y);
   // textos
-  const endTxt=z<=L[0].z+.05?'◆ Llegaste a lo más pequeño de este viaje':z>=L[L.length-1].z-.05?'◆ Llegaste a lo más grande que podemos ver':'';if($('sEnd').textContent!==endTxt)$('sEnd').textContent=endTxt;
+  const endTxt=stack.length?'Aléjate para volver al viaje':z<=LV[0].z+.05?'◆ Llegaste a lo más pequeño de este viaje':z>=LV[LV.length-1].z-.05?'◆ Llegaste a lo más grande que podemos ver':'';if($('sEnd').textContent!==endTxt)$('sEnd').textContent=endTxt;
   const e=Math.round(z);$('sExp').textContent='Ancho de la vista ≈ '+expTxt(e);$('sLen').textContent=fmtLen(Math.pow(10,z));
-  const n=nearest();if(n!==lastLevel){lastLevel=n;$('iName').textContent=L[n].name;$('iSize').textContent='Ancho de esta vista: unos '+fmtLen(Math.pow(10,L[n].z));$('iFact').textContent=L[n].fact+(L[n].photo?' · '+L[n].photo.credit+'.':'');const go={'Ciudad':'colombia','Colombia':'colombia','La Tierra':'tierra','La Tierra y la Luna':'luna','Sistema solar':'sistema'}[L[n].name];$('bEnter').classList.toggle('hide',!go);$('bEnter').onclick=()=>{location.href='../explorar/#'+go}}
-  $('info').style.opacity=Math.abs(L[n].z-z)<.8?1:.55;
+  const n=nearest();if(n!==lastLevel){lastLevel=n;$('iName').textContent=LV[n].name;$('iSize').textContent='Ancho de esta vista: unos '+fmtLen(Math.pow(10,LV[n].z));$('iFact').textContent=LV[n].fact+(LV[n].photo?' · '+LV[n].photo.credit+'.':'');const go={'Ciudad':'colombia','Colombia':'colombia','La Tierra':'tierra','La Tierra y la Luna':'luna','Sistema solar':'sistema'}[LV[n].name];$('bEnter').classList.toggle('hide',!go||stack.length>0);$('bEnter').onclick=()=>openExplore(go)}
+  $('info').style.opacity=Math.abs(LV[n].z-z)<.8?1:.55;
   drawTrack()}
-function zToY(v,h){return 10+(1-(v-ZMIN)/(ZMAX-ZMIN))*(h-20)}
+function zToY(v,h){return 10+(1-(v-LVmin)/(LVmax-LVmin))*(h-20)}
 function drawTrack(){const r=trc.getBoundingClientRect(),w=r.width,h=r.height;tctx.clearRect(0,0,w,h);
   tctx.strokeStyle='rgba(55,232,255,.4)';tctx.lineWidth=2;tctx.beginPath();tctx.moveTo(w/2,10);tctx.lineTo(w/2,h-10);tctx.stroke();
-  L.forEach((l,i)=>{const y=zToY(l.z,h);tctx.fillStyle=i===lastLevel?'#ffd23f':'rgba(55,232,255,.8)';tctx.beginPath();tctx.arc(w/2,y,i===lastLevel?5:3,0,7);tctx.fill()});
+  LV.forEach((l,i)=>{const y=zToY(l.z,h);tctx.fillStyle=i===lastLevel?'#ffd23f':'rgba(55,232,255,.8)';tctx.beginPath();tctx.arc(w/2,y,i===lastLevel?5:3,0,7);tctx.fill()});
   const y=zToY(z,h);tctx.strokeStyle='#fff';tctx.lineWidth=2;tctx.beginPath();tctx.moveTo(4,y);tctx.lineTo(w-4,y);tctx.stroke();
   tctx.font='700 10px Rajdhani,system-ui';tctx.fillStyle='rgba(216,251,255,.6)';tctx.textAlign='center';tctx.fillText('grande',w/2,8);tctx.fillText('pequeño',w/2,h-1)}
 trc.addEventListener('pointerdown',e=>{e.stopPropagation();const r=trc.getBoundingClientRect(),v=1-(e.clientY-r.top-10)/(r.height-20);stopAuto();
-  const tz=ZMIN+v*(ZMAX-ZMIN);let b=0;for(let i=1;i<L.length;i++)if(Math.abs(L[i].z-tz)<Math.abs(L[b].z-tz))b=i;zt=L[b].z});
+  const tz=LVmin+v*(LVmax-LVmin);let b=0;for(let i=1;i<LV.length;i++)if(Math.abs(LV[i].z-tz)<Math.abs(LV[b].z-tz))b=i;zt=LV[b].z});
 
 /* ---------- control táctil ---------- */
 const ptrs=new Map();let pinch0=null;
-cv.addEventListener('pointerdown',e=>{ptrs.set(e.pointerId,{x:e.clientX,y:e.clientY});stopAuto();pinch0=null});
+let downAt=null;cv.addEventListener('pointerdown',e=>{ptrs.set(e.pointerId,{x:e.clientX,y:e.clientY});downAt={x:e.clientX,y:e.clientY};stopAuto();pinch0=null});
 cv.addEventListener('pointermove',e=>{const p=ptrs.get(e.pointerId);if(!p)return;const np={x:e.clientX,y:e.clientY};
   if(ptrs.size===1){zt=clampZ(zt-(np.y-p.y)/VH*6)}
   else if(ptrs.size===2){ptrs.set(e.pointerId,np);const [a,b]=[...ptrs.values()],d=Math.hypot(a.x-b.x,a.y-b.y);if(pinch0)zt=clampZ(zt-Math.log10(d/pinch0)*3);pinch0=d;return}
   ptrs.set(e.pointerId,np)});
-const up=e=>{ptrs.delete(e.pointerId);pinch0=null};cv.addEventListener('pointerup',up);cv.addEventListener('pointercancel',up);
+const up=e=>{if(ptrs.size===1&&downAt&&Math.hypot(e.clientX-downAt.x,e.clientY-downAt.y)<10){const sp=spotAt(e.clientX,e.clientY);if(sp)go(sp)}ptrs.delete(e.pointerId);pinch0=null};cv.addEventListener('pointerup',up);cv.addEventListener('pointercancel',up);
 addEventListener('wheel',e=>{stopAuto();zt=clampZ(zt+e.deltaY*.003)},{passive:true});
 
 /* ---------- manos ---------- */
@@ -286,21 +331,26 @@ const fistLike=(s,hs)=>{const P=palmC(s);return dist(s[8],P)/hs<.85&&dist(s[12],
 
 function poseOf(s,hs,pinch){if(pinch)return'pinch';if(fistLike(s,hs))return'fist';const ext=j=>dist(s[j],palmC(s))/hs>1.15,i=ext(8),m=ext(12),r=ext(16),p=ext(20);
   if(i&&m&&r&&p)return'open';if(i&&!m&&!r&&!p)return'point';return'other'}
-function readHands(res){const seen=new Set();
+function readHands(res){if(exploring){try{exploring.contentWindow.postMessage({type:'hands',landmarks:res.landmarks,handedness:res.handedness,vw:video.videoWidth||640,vh:video.videoHeight||480},'*')}catch(e){}hands=[];return}
+  const seen=new Set();
   hands=res.landmarks.map((l,i)=>{const k='h'+(res.handedness?.[i]?.[0]?.categoryName||i);seen.add(k);const s=l.map(toScreen),hs=dist(s[0],s[9])||1,ratio=dist(s[4],s[8])/hs;
     const pinch=!fistLike(s,hs)&&(pinchState[k]?ratio<pinchCfg.off:ratio<pinchCfg.on);pinchState[k]=pinch;return{k,s,tip:s[8],pinch,pp:{x:(s[4].x+s[8].x)/2,y:(s[4].y+s[8].y)/2},pose:poseOf(s,hs,pinch)}});
   for(const k of Object.keys(pinchState))if(!seen.has(k)){delete pinchState[k];delete prevPinch[k]}
   // pellizco y mover: arriba = alejarse, abajo = acercarse
-  for(const h of hands){if(h.pinch){const pv=prevPinch[h.k];if(pv){stopAuto();zt=clampZ(zt-(h.pp.y-pv.y)/VH*7)}prevPinch[h.k]={...h.pp}}else delete prevPinch[h.k]}
+  for(const h of hands){if(h.pinch){const pv=prevPinch[h.k];if(!pv){const sp=spotAt(h.pp.x,h.pp.y);if(sp){go(sp);prevPinch[h.k]={x:-1e4,y:-1e4,spot:1};continue}}if(pv&&pv.spot)continue;if(pv){stopAuto();zt=clampZ(zt-(h.pp.y-pv.y)/VH*7)}prevPinch[h.k]={...h.pp}}else delete prevPinch[h.k]}
   // dos manos abiertas: separar = acercarse
   const op=hands.filter(h=>h.pose==='open');
   if(op.length===2){const d=dist(op[0].s[9],op[1].s[9]);if(open0){stopAuto();zt=clampZ(zt-Math.log10(d/open0)*4.5)}open0=d}else open0=null}
 let dwEl=null,dwT=0,dwPrev=null;
+let spDw={sp:null,t:0};
 function dwell(dt){let el=null;const h=hands.find(q=>q.pose==='point');
+  const sp=h&&!(document.elementFromPoint(h.tip.x,h.tip.y)||{}).closest?.('button')?spotAt(h.tip.x,h.tip.y):null;
+  if(sp&&spDw.sp&&sp.label===spDw.sp.label){spDw.t+=dt;spDw.sp=sp;if(spDw.t>=.9){spDw={sp:null,t:-.6};go(sp)}}else spDw={sp,t:0};
   if(h){const mv=dwPrev?dist(h.tip,dwPrev):0;dwPrev={...h.tip};const e=document.elementFromPoint(h.tip.x,h.tip.y);el=e&&e.closest('button');if(mv>10)dwT=Math.min(dwT,0)}else dwPrev=null;
   if(el!==dwEl){if(dwEl)dwEl.style.setProperty('--p',0);dwEl=el;dwT=0}
   if(el){dwT+=dt;el.style.setProperty('--p',Math.max(0,Math.min(1,dwT/.9)));if(dwT>=.9){el.click();dwT=-.8}}}
 function drawHands(){octx.clearRect(0,0,VW,VH);
+  if(spDw.sp&&spDw.t>0){const q=spDw.sp;octx.strokeStyle='#ffd23f';octx.lineWidth=4;octx.beginPath();octx.arc(q.px,q.py,q.pr+8,-Math.PI/2,-Math.PI/2+Math.PI*2*Math.min(1,spDw.t/.9));octx.stroke()}
   for(const h of hands){const s=h.s;octx.strokeStyle='rgba(55,232,255,.3)';octx.lineWidth=1.5;octx.beginPath();for(const {start,end} of HandLandmarker.HAND_CONNECTIONS){octx.moveTo(s[start].x,s[start].y);octx.lineTo(s[end].x,s[end].y)}octx.stroke();
     const p=h.pinch?h.pp:h.tip;octx.shadowColor='#37e8ff';octx.shadowBlur=14;octx.fillStyle=h.pinch?'#fff':'#37e8ff';octx.beginPath();octx.arc(p.x,p.y,h.pinch?10:7,0,7);octx.fill();octx.shadowBlur=0;
     const lbl={pinch:'arriba: alejar · abajo: acercar',open:hands.filter(q=>q.pose==='open').length>1?'separa o junta':null,point:'apuntar'}[h.pose];
@@ -311,9 +361,10 @@ let last=performance.now();
 function frame(t){requestAnimationFrame(frame);const dt=Math.min(.05,(t-last)/1000);last=t;
   if(ready&&lm&&video.readyState>=2&&video.currentTime!==lastVT){lastVT=video.currentTime;try{readHands(lm.detectForVideo(video,t))}catch(e){console.log(e)}}
   dwell(dt);
-  if(auto){const n=L[nearest()],near=Math.abs(n.z-z),sp=.25+Math.min(1,near)*1.1;
-    if(auto.phase==='in'){zt=z-sp*dt;if(zt<=L[0].z){zt=L[0].z;auto.phase='out'}}else{zt=z+sp*dt;if(zt>=L[L.length-1].z){zt=L[L.length-1].z;stopAuto()}}}
+  if(auto){const n=LV[nearest()],near=Math.abs(n.z-z),sp=.25+Math.min(1,near)*1.1;
+    if(auto.phase==='in'){zt=z-sp*dt;if(zt<=LV[0].z){zt=LV[0].z;auto.phase='out'}}else{zt=z+sp*dt;if(zt>=LV[LV.length-1].z){zt=LV[LV.length-1].z;stopAuto()}}}
   z+= (zt-z)*Math.min(1,dt*(auto?20:5));
+  if(stack.length&&zt>=LVmax-.001&&z>=LVmax-.04)exitBranch();
   render(t);drawHands()}
 size();requestAnimationFrame(frame);
 

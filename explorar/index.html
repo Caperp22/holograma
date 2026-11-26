@@ -30,6 +30,11 @@ button.on{background:rgba(55,232,255,.28)}
 #search{display:flex;gap:6px}#search input{flex:1;font:inherit;font-size:16px;color:#fff;background:rgba(2,20,28,.85);border:1px solid var(--c);border-radius:10px;padding:0 10px;min-height:44px}
 #hint{position:fixed;left:50%;top:62px;transform:translateX(-50%);z-index:4;font-size:14px;color:rgba(216,251,255,.75);text-align:center;pointer-events:none;width:92vw}
 #toast{position:fixed;left:50%;top:92px;transform:translateX(-50%);z-index:7;background:rgba(2,20,28,.92);border:1px solid var(--c);border-radius:10px;padding:8px 14px;font-weight:700;opacity:0;transition:opacity .3s;pointer-events:none;max-width:90vw;text-align:center}
+#viewer{position:fixed;inset:0;z-index:5;background:#000;overflow:hidden;touch-action:none}
+#vImg{position:absolute;left:50%;top:50%;max-width:100%;max-height:100%;transform-origin:center;will-change:transform;user-select:none;-webkit-user-drag:none}
+#vTop{position:absolute;left:0;right:0;top:0;display:flex;gap:8px;align-items:center;padding:max(10px,env(safe-area-inset-top)) 10px 0}#vCount{color:#ffd23f;font-weight:700}
+#vBot{position:absolute;left:0;right:0;bottom:0;padding:10px 12px max(10px,env(safe-area-inset-bottom));background:linear-gradient(to top,rgba(0,0,0,.9) 70%,rgba(0,0,0,0))}
+#vCap{font-size:17px;font-weight:700;color:#fff}#vCred{font-size:13px;color:rgba(216,251,255,.7);margin:2px 0 8px}.row2{display:flex;gap:8px}.row2 button{flex:1}
 #credit{position:fixed;left:8px;bottom:2px;z-index:3;font-size:10px;color:rgba(216,251,255,.45);pointer-events:none}
 .leaflet-control-attribution{font-size:10px!important;background:rgba(0,0,0,.55)!important;color:#ccc!important}.leaflet-control-attribution a{color:#9fe!important}
 .sheet{position:fixed;inset:0;z-index:8;display:grid;place-items:center;padding:20px;background:radial-gradient(circle at 50% 30%,rgba(6,48,58,.96),rgba(1,3,6,.98) 70%);overflow:auto}
@@ -59,6 +64,8 @@ button.on{background:rgba(55,232,255,.28)}
   <div id="actions" class="chips"></div>
   <div id="search" class="hide"><input id="q" placeholder="Busca una ciudad o un barrio" enterkeyhint="search"><button id="bFind">Buscar</button></div>
 </div>
+<div id="viewer" class="hide"><img id="vImg" alt=""><div id="vTop"><button id="vClose">✕ Cerrar fotos</button><span id="vCount"></span></div>
+  <div id="vBot"><div id="vCap"></div><div id="vCred"></div><div class="row2"><button id="vPrev">◀ Anterior</button><button id="vNext">Siguiente ▶</button></div></div></div>
 <div id="credit">Texturas: Solar System Scope (CC BY 4.0), basadas en datos de la NASA</div>
 
 <div id="intro" class="sheet"><div class="box">
@@ -84,6 +91,9 @@ import {FilesetResolver, HandLandmarker} from 'https://cdn.jsdelivr.net/npm/@med
 {
 const $=id=>document.getElementById(id);
 const LF=window.L;
+// modo incrustado: se abre dentro del viaje de escalas y le devuelve el control al salir
+const EMBED=new URLSearchParams(location.search).has('embed');let remoteV=null,entry=null;
+function closeEmbed(){if(EMBED)parent.postMessage({type:'explore-close'},'*')}
 const WASM='https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@0.10.14/wasm';
 const MODEL='https://storage.googleapis.com/mediapipe-models/hand_landmarker/hand_landmarker/float16/1/hand_landmarker.task';
 
@@ -130,7 +140,7 @@ for(const b of B){
 const pickables=B.map(b=>b.mesh);
 
 /* ---------- vistas ---------- */
-let mode='system',focus=null,sys={yaw:.6,pitch:.55,dist:62},foc={dist:3},freeze=false;
+let ringView=false,mode='system',focus=null,sys={yaw:.6,pitch:.55,dist:62},foc={dist:3},freeze=false;
 const camTarget=new THREE.Vector3(),camPos=new THREE.Vector3(48,30,40);
 function size(){const W=innerWidth,H=innerHeight;renderer.setSize(W,H,false);cam.aspect=W/H;
   const panH=W>=700?0:$('panel').getBoundingClientRect().height;cam.setViewOffset(W,H,0,panH*.42,W,H);cam.updateProjectionMatrix();
@@ -139,10 +149,10 @@ const octx=$('ov').getContext('2d');
 addEventListener('resize',size);new ResizeObserver(size).observe($('panel'));
 function worldPos(b){return b.mesh.getWorldPosition(new THREE.Vector3())}
 function fitDist(rr){const tV=Math.tan(22.5*Math.PI/180),tH=tV*cam.aspect;return Math.max(rr/(.8*tH),rr/(.55*tV))}
-function enter(b){focus=b;mode='focus';freeze=true;foc.dist=fitDist(b.ring?b.r*2.34:b.r);foc.min=b.r*1.12;foc.max=foc.dist*3;spinUser=null;showOnly(b);setUI();location.hash=b.id}
+function enter(b){ringView=false;focus=b;mode='focus';freeze=true;foc.dist=fitDist(b.ring?b.r*2.34:b.r);foc.min=b.r*1.12;foc.max=foc.dist*3;spinUser=null;showOnly(b);setUI();location.hash=b.id}
 function showOnly(b){const pair={tierra:'luna',luna:'tierra'};for(const o of B)o.tiltG.visible=!b||o===b||o.id==='sol'||pair[b.id]===o.id}
 function toSystem(){focus=null;mode='system';freeze=false;showOnly(null);setUI();history.replaceState(null,'',location.pathname)}
-function viewDir(){if(!focus)return new THREE.Vector3(0,0,1);const p=worldPos(focus),s=focus.id==='sol'?new THREE.Vector3(1,.3,1):p.clone().negate();s.y=0;s.normalize();
+function viewDir(){if(!focus)return new THREE.Vector3(0,0,1);if(ringView&&focus.ring){const p=worldPos(focus),s=p.clone().negate();s.y=0;s.normalize();const side=new THREE.Vector3().crossVectors(Y,s).normalize();return s.multiplyScalar(.35).add(side.multiplyScalar(.93)).add(new THREE.Vector3(0,.13,0)).normalize()}const p=worldPos(focus),s=focus.id==='sol'?new THREE.Vector3(1,.3,1):p.clone().negate();s.y=0;s.normalize();
   const side=new THREE.Vector3().crossVectors(Y,s).normalize();return s.multiplyScalar(.82).add(side.multiplyScalar(.45)).add(new THREE.Vector3(0,.32,0)).normalize()}
 function updateCamera(){
   if(mode==='system'){camTarget.lerp(new THREE.Vector3(),.08);const d=sys.dist/Math.min(1,cam.aspect*1.4);const want=new THREE.Vector3(Math.cos(sys.pitch)*Math.sin(sys.yaw)*d,Math.sin(sys.pitch)*d,Math.cos(sys.pitch)*Math.cos(sys.yaw)*d);camPos.lerp(want,.08)}
@@ -157,10 +167,12 @@ function setUI(){
   if(mode==='system'){$('title').textContent='Sistema solar';$('hint').textContent='Toca un planeta (o apúntalo con el dedo quieto) para entrar · tamaños y distancias no están a escala';
     $('iName').textContent='Sistema solar';$('iFacts').innerHTML='<li>El Sol y sus 8 planetas. <b>Elige uno</b> para entrar.</li>';
     chips(B.filter(b=>!b.parent).map(b=>[b.name,()=>enter(b)]).concat([['Luna',()=>enter(byId.luna)]]))}
-  else if(mode==='focus'){const b=focus;$('title').textContent=b.name;$('hint').textContent=b.id==='tierra'?'Acércate mucho para pasar a la imagen satelital':'Gira con el puño o arrastrando · acércate o aléjate';
+  else if(mode==='focus'){const b=focus;$('title').textContent=b.name;$('hint').textContent=b.id==='tierra'?'Toca o apunta cualquier lugar del globo para entrar ahí · o acércate mucho':'Gira con el puño o arrastrando · acércate o aléjate';
     $('iName').textContent=b.name;$('iFacts').innerHTML=b.facts.map(([k,v])=>`<li><b>${k}:</b> ${v}</li>`).join('')+(b.note?`<li>${b.note}</li>`:'');
-    const list=[['◀ Sistema solar',toSystem]];
-    if(b.id==='tierra'){list.push(['Ir a la Luna',()=>enter(byId.luna)]);for(const [n,la,lo,z] of PLACES)list.push([n,()=>openMap(la,lo,z)]);list.push(['Buscar lugar',()=>openMap(4.6,-74.1,5,true)])}
+    const list=[EMBED?['◀ Volver al viaje',closeEmbed]:['◀ Sistema solar',toSystem]];if(EMBED&&b.id!=='sol')list.push(['Sistema solar',toSystem]);
+    if(GAL[b.id])list.push(['📷 Fotos reales de la NASA',()=>openPhotos(b.id)]);
+    if(b.id==='saturno')list.push(['Ver los anillos de cerca',()=>{ringView=!ringView;foc.dist=ringView?b.r*2.7:fitDist(b.r*2.34);toast(ringView?'Vista rasante de los anillos. Para el detalle real, mira las fotos de la NASA':'Vista normal')}]);
+    if(b.id==='tierra'){list.push(['Buscar lugar',()=>openMap(4.6,-74.1,5,true)]);for(const [n,la,lo,z] of WORLD)list.push([n,()=>openMap(la,lo,z)]);list.push(['Ir a la Luna',()=>enter(byId.luna)]);for(const [n,la,lo,z] of PLACES)list.push([n,()=>openMap(la,lo,z)])}
     if(b.id==='luna')list.push(['Volver a la Tierra',()=>enter(byId.tierra)]);
     chips(list)}
   else{$('title').textContent='La Tierra · satélite';$('hint').textContent='';$('iName').textContent='Imagen satelital';
@@ -168,7 +180,7 @@ function setUI(){
     chips([['◀ Volver al globo',closeMap],...PLACES.map(([n,la,lo,z])=>[n,()=>map.flyTo([la,lo],z,{duration:1.6})])]);$('search').classList.remove('hide')}
   size()}
 $('bHome').onclick=()=>{location.href='../'};$('introHome').onclick=()=>{location.href='../'};
-function goBack(){if(mode==='map')closeMap();else if(mode==='focus'){if(focus.id==='luna')enter(byId.tierra);else toSystem()}else location.href='../escalas/'}
+function goBack(){if(V.on){closePhotos();return}if(EMBED&&mode!=='map'){closeEmbed();return}if(mode==='map')closeMap();else if(mode==='focus'){if(focus.id==='luna')enter(byId.tierra);else toSystem()}else location.href='../escalas/'}
 $('bBack').onclick=goBack;
 
 /* ---------- mapa satelital (Tierra) ---------- */
@@ -196,18 +208,55 @@ async function find(){const q=$('q').value.trim();if(!q)return;toast('Buscando�
   catch(e){toast('No pude buscar. Revisa tu conexión.')}}
 $('bFind').onclick=find;$('q').addEventListener('keydown',e=>{if(e.key==='Enter')find()});
 
+
+/* ---------- fotos reales de la NASA (dominio público, desde Wikimedia Commons) ---------- */
+const FP='https://commons.wikimedia.org/wiki/Special:FilePath/';
+const GAL={
+ saturno:[['Saturn_from_Cassini_Orbiter_(2004-10-06).jpg','Saturno en color natural, armado con fotos de la nave Cassini (2004)','NASA/JPL/Space Science Institute'],
+  ['Saturn,_its_rings,_and_a_few_of_its_moons.jpg','Saturno, sus anillos y algunas lunas, fotografiado por Cassini cerca del equinoccio de 2009','NASA/JPL/Space Science Institute'],
+  ['PIA17172_Saturn_eclipse_mosaic_bright_crop.jpg','Saturno a contraluz con el Sol detrás (Cassini, 2013). La Tierra aparece como un punto diminuto','NASA/JPL-Caltech/Space Science Institute'],
+  ['PIA21628_-_B_Ring_fine_structure_in_color.jpg','Los anillos de muy cerca: estructura fina del anillo B, en color (Cassini, 2017)','NASA/JPL-Caltech/Space Science Institute'],
+  ['PIA06540_Outer_C_Ring.jpg','Primer plano del anillo C: las bandas claras y oscuras muestran cuántas partículas de hielo hay a cada distancia','NASA/JPL/Space Science Institute']],
+ jupiter:[['PIA22946-Jupiter-RedSpot-JunoSpacecraft-20190212.jpg','La Gran Mancha Roja y el hemisferio sur de Júpiter, vistos por la nave Juno (2019)','NASA/JPL-Caltech/SwRI/MSSS'],
+  ['Great_red_spot_juno_20170712.jpg','La Gran Mancha Roja de cerca, en el paso de Juno del 11 de julio de 2017','NASA/SwRI/MSSS/Gerald Eichstädt/Seán Doran'],
+  ['Great_Red_Spot_From_Voyager_1.jpg','La Gran Mancha Roja vista por la nave Voyager 1 en 1979','NASA/JPL']],
+ marte:[['Mars_Valles_Marineris.jpeg','Marte con el Valles Marineris al centro: un cañón de más de 3.000 km de largo y hasta 8 km de profundidad','NASA/USGS (naves Viking)'],
+  ['MARS-Viking.jpg','Mapa de todo Marte armado con unas 1.000 fotos de las naves Viking','NASA']],
+ tierra:[['The_Earth_seen_from_Apollo_17.jpg','La «canica azul»: la Tierra fotografiada por la tripulación del Apolo 17 en 1972','NASA']],
+};
+const V={on:false,list:null,i:0,sc:1,tx:0,ty:0};
+function vApply(){$('vImg').style.transform=`translate(calc(-50% + ${V.tx}px),calc(-50% + ${V.ty}px)) scale(${V.sc})`}
+function vShow(){const [f,cap,cr]=V.list[V.i];$('vImg').src=FP+encodeURIComponent(f)+'?width=1600';$('vCap').textContent=cap;$('vCred').textContent='Foto real: '+cr+' · dominio público';
+  $('vCount').textContent=`${V.i+1} de ${V.list.length}`;V.sc=1;V.tx=V.ty=0;vApply()}
+function openPhotos(id){V.on=true;V.list=GAL[id];V.i=0;$('viewer').classList.remove('hide');vShow()}
+function closePhotos(){V.on=false;$('viewer').classList.add('hide')}
+$('vClose').onclick=closePhotos;$('vNext').onclick=()=>{V.i=(V.i+1)%V.list.length;vShow()};$('vPrev').onclick=()=>{V.i=(V.i-1+V.list.length)%V.list.length;vShow()};
+$('vImg').onerror=()=>{$('vCap').textContent='No pude cargar esta foto. Revisa tu conexión o pasa a la siguiente.'};
+{const vp=new Map();let p0=null;const el=$('viewer');
+ el.addEventListener('pointerdown',e=>{if(e.target.closest('button'))return;vp.set(e.pointerId,{x:e.clientX,y:e.clientY});p0=null});
+ el.addEventListener('pointermove',e=>{const p=vp.get(e.pointerId);if(!p)return;const np={x:e.clientX,y:e.clientY};
+   if(vp.size===1){V.tx+=np.x-p.x;V.ty+=np.y-p.y;vApply()}else if(vp.size===2){vp.set(e.pointerId,np);const [a,b]=[...vp.values()],d=Math.hypot(a.x-b.x,a.y-b.y);if(p0){V.sc=Math.max(1,Math.min(8,V.sc*d/p0));vApply()}p0=d;return}vp.set(e.pointerId,np)});
+ const up=e=>{vp.delete(e.pointerId);p0=null};el.addEventListener('pointerup',up);el.addEventListener('pointercancel',up);
+ el.addEventListener('wheel',e=>{V.sc=Math.max(1,Math.min(8,V.sc*Math.pow(.998,e.deltaY)));vApply()},{passive:true})}
+
+/* ---------- la Tierra: entrar a cualquier lugar ---------- */
+const WORLD=[['Europa',50,12,4],['África',3,20,3.3],['Asia',35,90,3.2],['Norteamérica',45,-100,3.3],['Sudamérica',-15,-60,3.3],['Oceanía',-25,135,3.6],['Antártida',-80,0,3],
+  ['Islas Galápagos',-.7,-90.5,8],['Hawái',20.6,-157.4,7],['San Andrés',12.55,-81.72,13],['Islas Canarias',28.3,-16,8],['Islandia',64.9,-18.6,6]];
+function earthLatLonAt(x,y){ray.setFromCamera(new THREE.Vector2(x/innerWidth*2-1,-(y/innerHeight)*2+1),cam);const h=ray.intersectObject(byId.tierra.mesh,false)[0];
+  if(!h||!h.uv)return null;return[h.uv.y*180-90,h.uv.x*360-180]}
+
 /* ---------- controles: zoom y giro ---------- */
 let spinUser=null;
 let limT=0;
 function limitMsg(near){const now=performance.now();if(now-limT<2500)return;limT=now;
   if(mode==='system')toast(near?'Llegaste a lo más cerca del sistema solar. Toca un planeta para entrar.':'Llegaste a lo más lejos: aquí se ve todo el sistema solar.');
   else if(mode==='focus'){if(near)toast(focus.id==='tierra'?'Sigue acercándote para pasar al mapa satelital':focus.id==='sol'?'Máximo acercamiento: del Sol no hay más detalle que ver de cerca.':'Máximo acercamiento a '+focus.name+'. Solo la Tierra tiene mapa satelital.');
-    else toast('Máximo alejamiento. Toca «◀ Sistema solar» para ver los demás.')}
+    else toast(EMBED?'Aléjate un poco más para volver al viaje':'Máximo alejamiento. Toca «◀ Sistema solar» para ver los demás.')}
   else toast(near?'Máximo acercamiento del mapa':'Aléjate un poco más para volver al globo')}
-function zoomBy(f){if(mode==='system'){const n=sys.dist*f;if(n<18&&f<1)limitMsg(true);if(n>120&&f>1)limitMsg(false);sys.dist=Math.max(18,Math.min(120,n))}
-  else if(mode==='focus'){const n=foc.dist*f;if(n<foc.min&&f<1&&focus.id!=='tierra')limitMsg(true);if(n>foc.max&&f>1)limitMsg(false);foc.dist=Math.max(foc.min,Math.min(foc.max,n));if(focus.id==='tierra'&&foc.dist<=foc.min*1.02&&f<1){const [la,lo]=latLonOfView();openMap(la,lo,4.2)}}
+function zoomBy(f){if(V.on){V.sc=Math.max(1,Math.min(8,V.sc/f));vApply();return}if(mode==='system'){const n=sys.dist*f;if(EMBED&&n>120*1.02&&f>1){closeEmbed();return}if(n<18&&f<1)limitMsg(true);if(n>120&&f>1)limitMsg(false);sys.dist=Math.max(18,Math.min(120,n))}
+  else if(mode==='focus'){const n=foc.dist*f;if(EMBED&&n>foc.max*1.02&&f>1){closeEmbed();return}if(n<foc.min&&f<1&&focus.id!=='tierra')limitMsg(true);if(n>foc.max&&f>1)limitMsg(false);foc.dist=Math.max(foc.min,Math.min(foc.max,n));if(focus.id==='tierra'&&foc.dist<=foc.min*1.02&&f<1){const [la,lo]=latLonOfView();openMap(la,lo,4.2)}}
   else{const z=map.getZoom()-Math.log2(f)*1.6;if(z>=map.getMaxZoom()&&f<1)limitMsg(true);map.setZoom(z,{animate:false})}}
-function dragBy(dx,dy){if(mode==='system'){sys.yaw-=dx*.006;sys.pitch=Math.max(.08,Math.min(1.45,sys.pitch+dy*.006))}
+function dragBy(dx,dy){if(V.on){V.tx+=dx;V.ty+=dy;vApply();return}if(mode==='system'){sys.yaw-=dx*.006;sys.pitch=Math.max(.08,Math.min(1.45,sys.pitch+dy*.006))}
   else if(mode==='focus'){spinUser=performance.now();const q=new THREE.Quaternion().setFromAxisAngle(Y,dx*.008);focus.mesh.quaternion.premultiply(q);
     const right=new THREE.Vector3().crossVectors(viewDir(),Y).normalize();focus.mesh.quaternion.premultiply(new THREE.Quaternion().setFromAxisAngle(right,-dy*.008))}
   else map.panBy([-dx,-dy],{animate:false})}
@@ -220,7 +269,8 @@ gl.addEventListener('pointermove',e=>{const p=ptrs.get(e.pointerId);if(!p)return
   if(ptrs.size===1){dragBy(np.x-p.x,np.y-p.y);moved+=Math.abs(np.x-p.x)+Math.abs(np.y-p.y)}
   else if(ptrs.size===2){ptrs.set(e.pointerId,np);const [a,b]=[...ptrs.values()],d=Math.hypot(a.x-b.x,a.y-b.y);if(pinch0)zoomBy(pinch0/d);pinch0=d;moved=99;return}
   ptrs.set(e.pointerId,np)});
-gl.addEventListener('pointerup',e=>{if(ptrs.size===1&&moved<8&&mode==='system'){const b=pickAt(e.clientX,e.clientY);if(b)enter(b)}ptrs.delete(e.pointerId);pinch0=null});
+gl.addEventListener('pointerup',e=>{if(ptrs.size===1&&moved<8&&mode==='system'){const b=pickAt(e.clientX,e.clientY);if(b)enter(b)}
+  else if(ptrs.size===1&&moved<8&&mode==='focus'&&focus.id==='tierra'){const ll=earthLatLonAt(e.clientX,e.clientY);if(ll)openMap(ll[0],ll[1],5.5)}ptrs.delete(e.pointerId);pinch0=null});
 gl.addEventListener('pointercancel',e=>{ptrs.delete(e.pointerId);pinch0=null});
 gl.addEventListener('wheel',e=>zoomBy(Math.pow(1.0015,e.deltaY)),{passive:true});
 
@@ -228,7 +278,7 @@ gl.addEventListener('wheel',e=>zoomBy(Math.pow(1.0015,e.deltaY)),{passive:true})
 const video=$('video');let lm=null,ready=false,hands=[],lastVT=-1;
 let pinchCfg={on:.33,off:.52};try{const v=JSON.parse(localStorage.getItem('holo-rubik-pinch')||'null');if(v)pinchCfg=v}catch(e){}
 const pinchState={},fingers={},poseMem={},palmPrev={},hold={};let open0=null;
-function toScreen(p){const vw=video.videoWidth||640,vh=video.videoHeight||480,W=innerWidth,H=innerHeight,k=Math.max(W/vw,H/vh);return{x:W-(p.x*vw*k-(vw*k-W)/2),y:p.y*vh*k-(vh*k-H)/2}}
+function toScreen(p){const vw=remoteV?remoteV[0]:video.videoWidth||640,vh=remoteV?remoteV[1]:video.videoHeight||480,W=innerWidth,H=innerHeight,k=Math.max(W/vw,H/vh);return{x:W-(p.x*vw*k-(vw*k-W)/2),y:p.y*vh*k-(vh*k-H)/2}}
 const dist=(a,b)=>Math.hypot(a.x-b.x,a.y-b.y);
 const palmC=s=>({x:(s[0].x+s[5].x+s[9].x+s[13].x+s[17].x)/5,y:(s[0].y+s[5].y+s[9].y+s[13].y+s[17].y)/5});
 // puño: las puntas del índice y del medio quedan dentro de la palma (en un pellizco el índice queda afuera)
@@ -255,17 +305,18 @@ let dwKey=null,dwT=0,dwPrev=null,dwTarget=null;
 function dwell(dt){const h=hands.find(q=>q.pose==='point');let tgt=null,key=null;
   if(h){const mv=dwPrev?dist(h.tip,dwPrev):0;dwPrev={...h.tip};if(mv>10)dwT=Math.min(dwT,0);
     const e=document.elementFromPoint(h.tip.x,h.tip.y),btn=e&&e.closest('button');
-    if(btn){tgt=btn;key=btn}else if(mode==='system'&&e===gl){const b=pickAt(h.tip.x,h.tip.y);if(b){tgt=b;key=b.id}}}else dwPrev=null;
+    if(btn){tgt=btn;key=btn}else if(mode==='system'&&e===gl){const b=pickAt(h.tip.x,h.tip.y);if(b){tgt=b;key=b.id}}
+    else if(mode==='focus'&&focus&&focus.id==='tierra'&&e===gl){const ll=earthLatLonAt(h.tip.x,h.tip.y);if(ll){tgt={earth:ll,name:'Entrar aquí',x:h.tip.x,y:h.tip.y};key='earth'}}}else dwPrev=null;
   if(key!==dwKey){if(dwTarget&&dwTarget.style)dwTarget.style.setProperty('--p',0);dwKey=key;dwTarget=tgt;dwT=0}
   if(tgt){dwT+=dt;const p=Math.max(0,Math.min(1,dwT/.9));if(tgt.style)tgt.style.setProperty('--p',p);
-    if(dwT>=.9){dwT=-.8;if(tgt.click)tgt.click();else enter(tgt)}}}
+    if(dwT>=.9){dwT=-.8;if(tgt.click)tgt.click();else if(tgt.earth)openMap(tgt.earth[0],tgt.earth[1],5.5);else enter(tgt)}}}
 function drawHands(){const W=innerWidth,H=innerHeight;octx.clearRect(0,0,W,H);
   for(const h of hands){const s=h.s;octx.strokeStyle='rgba(55,232,255,.3)';octx.lineWidth=1.5;octx.beginPath();for(const {start,end} of HandLandmarker.HAND_CONNECTIONS){octx.moveTo(s[start].x,s[start].y);octx.lineTo(s[end].x,s[end].y)}octx.stroke();
     octx.shadowColor='#37e8ff';octx.shadowBlur=14;octx.fillStyle='#37e8ff';octx.beginPath();octx.arc(h.tip.x,h.tip.y,7,0,7);octx.fill();octx.shadowBlur=0;
     const lbl={point:'apuntar',fist:mode==='map'?'moviendo el mapa':'girando',open:hands.filter(q=>q.pose==='open').length>1?'zoom':'mano libre',pinch:'arriba/abajo: zoom',victory:'atrás'}[h.pose];
     if(lbl){octx.font='700 15px Rajdhani,system-ui';octx.textAlign='center';octx.fillStyle='#37e8ff';octx.fillText(lbl,s[0].x,s[0].y+22)}
     if(h.holdP>0){octx.strokeStyle='#ffd23f';octx.lineWidth=5;octx.beginPath();octx.arc(s[9].x,s[9].y,30,-Math.PI/2,-Math.PI/2+Math.PI*2*h.holdP);octx.stroke()}}
-  if(dwKey&&typeof dwKey==='string'&&dwTarget&&!dwTarget.style&&dwT>0){const p=worldPos(dwTarget).project(cam),x=(p.x+1)/2*W,y=(1-p.y)/2*H;
+  if(dwKey&&typeof dwKey==='string'&&dwTarget&&!dwTarget.style&&dwT>0){let x,y;if(dwTarget.earth){x=dwTarget.x;y=dwTarget.y}else{const p=worldPos(dwTarget).project(cam);x=(p.x+1)/2*W;y=(1-p.y)/2*H}
     octx.strokeStyle='#ffd23f';octx.lineWidth=4;octx.beginPath();octx.arc(x,y,34,-Math.PI/2,-Math.PI/2+Math.PI*2*Math.min(1,dwT/.9));octx.stroke();
     octx.font='700 16px Rajdhani,system-ui';octx.fillStyle='#ffd23f';octx.textAlign='center';octx.fillText(dwTarget.name,x,y-42)}}
 
@@ -300,7 +351,8 @@ size();setUI();requestAnimationFrame(frame);
 /* ---------- inicio por enlace: #tierra, #luna, #colombia… ---------- */
 function fromHash(){const h=location.hash.slice(1);if(byId[h]){for(let i=0;i<60;i++)updateCamera();enter(byId[h])}
   else if(h==='colombia'){enter(byId.tierra);setTimeout(()=>openMap(4.6,-74.1,5.3),600)}
-  else if(h==='sistema')toSystem()}
+  else if(h==='sistema')toSystem();
+  else if(h.startsWith('mapa=')){const [la,lo,z]=h.slice(5).split(',').map(Number);enter(byId.tierra);setTimeout(()=>openMap(la,lo,z||11),500)}}
 
 /* ---------- cámara ---------- */
 function fail(m){$('err').textContent=m;$('err').classList.remove('hide');$('start').disabled=false;$('start').textContent='Reintentar'}
@@ -311,6 +363,9 @@ $('start').onclick=async()=>{$('start').disabled=true;$('start').textContent='Ca
     try{lm=await HandLandmarker.createFromOptions(fs,o('GPU'))}catch(e){lm=await HandLandmarker.createFromOptions(fs,o('CPU'))}}catch(e){fail('No pude cargar el modelo de manos. Revisa tu conexión.');return}
   ready=true;$('intro').classList.add('hide');fromHash()};
 $('touch').onclick=()=>{video.classList.add('hide');$('intro').classList.add('hide');fromHash()};
+if(EMBED){video.classList.add('hide');$('intro').classList.add('hide');$('bHome').classList.add('hide');$('bBack').textContent='◀ Volver al viaje';
+  addEventListener('message',e=>{const d=e.data;if(d&&d.type==='hands'){remoteV=[d.vw,d.vh];try{readHands(d)}catch(err){console.log(err)}}});
+  setTimeout(fromHash,50)}
 }
 </script>
 </body>
