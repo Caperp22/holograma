@@ -45,6 +45,7 @@ button:disabled{opacity:.45}
 .sheet h2{font-size:30px;margin:0 0 8px;color:var(--c);text-shadow:0 0 12px var(--c)}
 .sheet p,.sheet li{color:rgba(216,251,255,.88)}
 .sheet ul{padding-left:20px;margin:8px 0 12px}
+.sheet .row button{justify-content:center;text-align:center}
 .sheet button{width:100%;margin-top:8px;min-height:50px;font-size:18px;text-align:left;display:flex;align-items:center;justify-content:space-between;gap:8px}
 .sheet button small{font-weight:500;color:var(--y);font-size:14px}
 #err{color:#ff9a9a}
@@ -58,7 +59,7 @@ button:disabled{opacity:.45}
 <canvas id="ov"></canvas>
 
 <div id="top">
-  <button id="bMenu">Menú</button>
+  <button id="bMenu">⌂ Inicio</button>
   <div id="title">Holo Rubik</div>
   <button id="bGest">Gestos</button>
   <button id="bLevels">Niveles</button>
@@ -99,24 +100,25 @@ button:disabled{opacity:.45}
   <ul>
     <li>☝️ <b>Apunta</b> con el índice: el cuadro que tocas se ilumina.</li>
     <li>🤏 <b>Pellizca</b> y arrastra: esa capa te sigue (también las del medio).</li>
-    <li>✋ <b>Mano abierta</b> y muévela: gira todo el cubo.</li>
-    <li>✌️ deshacer · 👍 hazlo por mí · ✊ centrar (sostenidos 1 s). Toca «Gestos» para ver todos.</li>
+    <li>✊ <b>Puño</b> y muévelo: gira todo el cubo. Abre la mano para soltarlo.</li>
+    <li>✌️ deshacer · 👍 hazlo por mí (sostenidos 1 s). Toca «Gestos» para ver todos.</li>
   </ul>
   <button id="start">Activar cámara</button>
   <button id="touch">Usar el dedo en la pantalla</button>
   <p id="err" class="hide"></p>
+  <div class="row" style="margin-top:14px"><button class="goHome">⌂ Inicio</button><button class="goGames">◀ Otros juegos</button></div>
 </div></div>
 
 <div id="gestures" class="sheet hide"><div class="box">
   <h2>Gestos</h2>
   <ul id="gList">
     <li><b>☝️ Índice estirado:</b> apuntar. Ilumina el cuadro que tocas y presiona botones si lo dejas quieto.</li>
-    <li><b>🤏 Pellizco</b> (pulgar + índice): agarra la capa que estás tocando y arrástrala. Suelta para que encaje.</li>
-    <li><b>✋ Mano abierta</b> y moverla: gira todo el cubo.</li>
+    <li><b>🤏 Pellizco</b> (pulgar + índice): primero apunta un cuadro con el índice hasta que se marque, luego pellizca. Se agarra ese cuadro aunque el dedo se mueva un poco. Arrastra y suelta para que encaje.</li>
+    <li><b>✊ Puño</b>: agarra el cubo entero. Mueve el puño para girarlo y <b>abre la mano para soltarlo</b>.</li>
+    <li><b>✋ Mano abierta</b>: mano libre, no hace nada. Úsala para descansar o reacomodarte.</li>
     <li><b>🙌 Dos manos abiertas:</b> sepáralas o júntalas para acercar o alejar.</li>
     <li><b>✌️ Dos dedos</b> sostenidos 1 segundo: deshacer.</li>
     <li><b>👍 Pulgar arriba</b> sostenido 1 segundo: hazlo por mí (siguiente paso del guía).</li>
-    <li><b>✊ Puño</b> sostenido 1 segundo: centrar la vista.</li>
   </ul>
   <button id="gCal">Calibrar el pellizco</button>
   <button id="gClose">Cerrar</button>
@@ -126,6 +128,7 @@ button:disabled{opacity:.45}
   <h2>Elige cómo jugar</h2>
   <p>Los niveles siguen el método para principiantes. Cada uno empieza con lo anterior ya resuelto.</p>
   <div id="lvList"></div>
+  <div class="row" style="margin-top:14px"><button class="goHome">⌂ Inicio</button><button class="goGames">◀ Otros juegos</button></div>
 </div></div>
 
 <div id="done" class="sheet hide"><div class="box">
@@ -134,6 +137,7 @@ button:disabled{opacity:.45}
   <button id="dNext">Siguiente nivel</button>
   <button id="dAgain">Repetir este nivel</button>
   <button id="dLevels">Ver niveles</button>
+  <button class="goHome">⌂ Inicio</button>
 </div></div>
 
 <script type="module">
@@ -281,7 +285,7 @@ $('bScr').onclick=()=>{if(busy())return;history=[];for(const m of C.scramble(20)
 $('bReset').onclick=()=>{state=C.SOLVED.slice();history=[];layout();replan()};
 $('bView').onclick=()=>{viewQ.copy(DEFAULT_VIEW);zoom=1};
 $('bLevels').onclick=()=>{buildLevels();$('levels').classList.remove('hide')};
-$('bMenu').onclick=()=>{location.href='../juegos/'};
+$('bMenu').onclick=()=>{location.href='../'};document.querySelectorAll('.goHome').forEach(b=>b.onclick=()=>{location.href='../'});document.querySelectorAll('.goGames').forEach(b=>b.onclick=()=>{location.href='../juegos/'});
 $('dNext').onclick=()=>{if(mode==='level'&&level<7)startMode('level',level+1);else startMode('final')};
 $('dAgain').onclick=()=>{if(mode==='level')startMode('level',level);else startMode(mode)};
 $('dLevels').onclick=()=>{$('done').classList.add('hide');buildLevels();$('levels').classList.remove('hide')};
@@ -304,11 +308,11 @@ function drawHot(now){if(!hot)return;const R=Math.max(19,Math.min(26,innerWidth*
 /* ---------- manipulación directa: agarrar y arrastrar capas ---------- */
 const drags={};
 function rotateView(dx,dy){const q=new THREE.Quaternion().setFromEuler(new THREE.Euler(dy*.009,dx*.009,0));viewQ.premultiply(q)}
-function dragBegin(key,p){
+function dragBegin(key,p,lock=null){
   if(hot&&Math.hypot(hot.x-p.x,hot.y-p.y)<36&&!busy()){doMove(hot.mv);drags[key]={phase:'done'};return}
   if(Object.values(drags).some(d=>d.phase==='pending'||d.phase==='layer')){drags[key]={phase:'done'};return}
-  const slot=busy()?null:hitSlot(p.x,p.y);
-  drags[key]={start:{...p},last:{...p},slot,phase:slot!=null?'pending':(key==='ptr'?'view':'done'),angle:0}}
+  const slot=busy()?null:(lock!=null?lock:hitSlot(p.x,p.y));
+  drags[key]={start:{...p},last:{...p},slot,thr:key==='ptr'?14:Math.max(30,innerWidth*.07),phase:slot!=null?'pending':(key==='ptr'?'view':'done'),angle:0}}
 function beginLayer(d,dv){const s=C.SLOTS[d.slot],hp=new THREE.Vector3(...s.p).addScaledVector(new THREE.Vector3(...s.n),.5);let best=null;
   AX.forEach((a,ai)=>{if(Math.abs(a.dot(new THREE.Vector3(...s.n)))>.5)return;
     const p0=toPx(cube.localToWorld(hp.clone())),p1=toPx(cube.localToWorld(hp.clone().applyAxisAngle(a,.15)));
@@ -318,11 +322,11 @@ function beginLayer(d,dv){const s=C.SLOTS[d.slot],hp=new THREE.Vector3(...s.p).a
 function dragUpdate(key,p){const d=drags[key];if(!d||d.phase==='done')return;
   if(d.phase==='view')rotateView(p.x-d.last.x,p.y-d.last.y);
   else{const dv={x:p.x-d.start.x,y:p.y-d.start.y};
-    if(d.phase==='pending'&&Math.hypot(dv.x,dv.y)>14){if(busy())d.phase='done';else beginLayer(d,dv)}
-    if(d.phase==='layer'){d.angle=(dv.x*d.sv.x+dv.y*d.sv.y)/(d.sv.x*d.sv.x+d.sv.y*d.sv.y)*.15*1.6;pivot.quaternion.setFromAxisAngle(AX[d.ai],d.angle)}}
+    if(d.phase==='pending'&&Math.hypot(dv.x,dv.y)>d.thr){if(busy())d.phase='done';else beginLayer(d,dv)}
+    if(d.phase==='layer'){d.angle=(dv.x*d.sv.x+dv.y*d.sv.y)/(d.sv.x*d.sv.x+d.sv.y*d.sv.y)*.15*1.25;pivot.quaternion.setFromAxisAngle(AX[d.ai],d.angle)}}
   d.last={...p}}
 function dragEnd(key){const d=drags[key];delete drags[key];if(!d||d.phase!=='layer')return;
-  const ab=Math.abs(d.angle),q=ab>.55?Math.sign(d.angle)*(Math.floor((ab-.55)/(Math.PI/2))+1):0,k=((q%4)+4)%4;let m=null;
+  const ab=Math.abs(d.angle),q=ab<.55?0:Math.sign(d.angle)*Math.max(1,Math.round(ab/(Math.PI/2))),k=((q%4)+4)%4;let m=null;
   if(k){if(d.layer){const kN=d.layer>0?k:(4-k)%4,f=FACE_OF[AX[d.ai].toArray().map(v=>v*d.layer).join(',')];m=f+['',"'",'2',''][kN];}
     else{const nm='MES'[d.ai];m=d.ai===2?nm+['',"'",'2',''][k]:nm+['','','2',"'"][k]}}
   anim={m,src:'user',axis:AX[d.ai],from:d.angle,to:q*Math.PI/2,t:0,dur:.14}}
@@ -342,40 +346,53 @@ function readHands(res){const seen=new Set();
   hands=res.landmarks.map((l,i)=>{const k='h'+(res.handedness?.[i]?.[0]?.categoryName||i);seen.add(k);
     const s=l.map(toScreen),hs=dist(s[0],s[9])||1,ratio=dist(s[4],s[8])/hs;
     const was=pinchState[k],pinch=was?ratio<pinchCfg.off:ratio<pinchCfg.on;pinchState[k]=pinch;if(pinch&&!was)delete smooth[k];
-    const raw={x:(s[4].x+s[8].x)/2,y:(s[4].y+s[8].y)/2},sm=smooth[k]=smooth[k]?{x:smooth[k].x*.45+raw.x*.55,y:smooth[k].y*.45+raw.y*.55}:raw;
-    return{k,s,tip:s[8],pinch,pp:sm,ratio,hs,pose:stablePose(k,poseOf(s,hs,pinch))}});
+    const raw={x:(s[4].x+s[8].x)/2,y:(s[4].y+s[8].y)/2},sm=smooth[k]=smooth[k]?{x:smooth[k].x*.5+raw.x*.5,y:smooth[k].y*.5+raw.y*.5}:raw;
+    return{k,s,tip:s[8],pinch,pp:sm,ratio,hs,pose:stablePose(k,poseOf(k,s,hs,pinch))}});
   for(const k of Object.keys(pinchState))if(!seen.has(k)){delete pinchState[k];delete smooth[k];dragEnd(k)}
   if(cal){calStep();return}
   gestures(performance.now())}
-function poseOf(s,hs,pinch){if(pinch)return'pinch';
-  const ext=j=>dist(s[j],s[0])>dist(s[j-2],s[0])*1.12,i=ext(8),m=ext(12),r=ext(16),p=ext(20);
+// dedos estirados con histéresis: no cambian de estado por un temblor
+const fingers={};
+function poseOf(k,s,hs,pinch){if(pinch)return'pinch';
+  const st=fingers[k]=fingers[k]||{};
+  const ext=j=>{const r=dist(s[j],s[0])/(dist(s[j-2],s[0])||1);if(r>1.2)st[j]=true;else if(r<1.03)st[j]=false;return!!st[j]};
+  const i=ext(8),m=ext(12),r=ext(16),p=ext(20);
   const thumbUp=dist(s[4],s[9])>hs*.7&&s[4].y<s[3].y&&s[3].y<s[2].y&&s[4].y<s[6].y-hs*.15;
   if(i&&m&&r&&p)return'open';if(i&&!m&&!r&&!p)return'point';if(i&&m&&!r&&!p)return'victory';
   if(!i&&!m&&!r&&!p)return thumbUp?'thumb':'fist';return'other'}
 const poseMem={};
 function stablePose(k,p){const m=poseMem[k]=poseMem[k]||{pose:p,cand:p,n:0};
-  if(p==='pinch'||p===m.pose){m.pose=p;m.cand=p;m.n=0;return p}
-  if(p===m.cand){if(++m.n>=3){m.pose=p;m.n=0}}else{m.cand=p;m.n=1}
+  if(p===m.pose){m.cand=p;m.n=0;return p}
+  const need=p==='pinch'?2:m.pose==='pinch'?3:5;   // el pellizco entra rápido; los demás gestos deben mantenerse
+  if(p===m.cand){if(++m.n>=need){m.pose=p;m.n=0}}else{m.cand=p;m.n=1}
   return m.pose}
-const palmPrev={},hold={};let zoom=1,twoOpen=null;
-const HOLD_ACT={victory:['Deshacer',()=>$('bUndo').click()],thumb:['Hazlo por mí',()=>{if(!guideOn){toast('Activa la Pista para que te ayude');return}$('bAuto').click()}],fist:['Centrar vista',()=>{viewQ.copy(DEFAULT_VIEW);zoom=1}]};
+const palmPrev={},hold={},hov={};let zoom=1,twoOpen=null;
+const HOLD_MS=1200;
+const HOLD_ACT={victory:['Deshacer',()=>$('bUndo').click()],thumb:['Hazlo por mí',()=>{if(!guideOn){toast('Activa la Pista para que te ayude');return}$('bAuto').click()}]};
 function gestures(now){
   const open=hands.filter(h=>h.pose==='open');
   for(const h of hands){
-    // pellizco: mover la parte seleccionada
-    if(h.pose==='pinch'){if(!drags[h.k])dragBegin(h.k,h.pp);else dragUpdate(h.k,h.pp)}else if(drags[h.k])dragEnd(h.k);
-    // mano abierta: girar todo el cubo
+    // apuntar: recordar el cuadro que señalas (se usa al pellizcar, aunque el dedo se mueva al juntar los dedos)
+    if(h.pose==='point'){const sl=busy()?null:hitSlot(h.tip.x,h.tip.y),m=hov[h.k];
+      if(!m||m.slot!==sl)hov[h.k]={slot:sl,since:now,last:now,stable:m?m.stable:null,stableAt:m?m.stableAt:0};else m.last=now;
+      const q=hov[h.k];if(q.slot!=null&&now-q.since>=110){q.stable=q.slot;q.stableAt=now}}
+    // pellizco: agarrar la capa del cuadro señalado
+    const d=drags[h.k];
+    if(h.pose==='pinch'){
+      if(!d){const q=hov[h.k],lock=q&&q.stable!=null&&now-q.stableAt<450?q.stable:null;dragBegin(h.k,h.pp,lock)}
+      else{d.lostAt=null;dragUpdate(h.k,h.pp)}}
+    else if(d){if(!d.lostAt)d.lostAt=now;else if(now-d.lostAt>170)dragEnd(h.k)}
+    // puño: agarrar el cubo entero y girarlo; abrir la mano lo suelta
     const c=h.s[9],pv=palmPrev[h.k];palmPrev[h.k]={x:c.x,y:c.y};
-    if(h.pose==='open'&&open.length===1&&pv&&!busy()){const dx=c.x-pv.x,dy=c.y-pv.y;if(Math.hypot(dx,dy)>1.5)rotateView(dx*1.1,dy*1.1)}
+    if(h.pose==='fist'&&pv&&!busy()){const dx=c.x-pv.x,dy=c.y-pv.y;if(Math.hypot(dx,dy)>1.2)rotateView(dx*1.25,dy*1.25)}
     // gestos sostenidos
     const hd=hold[h.k]=hold[h.k]||{pose:null,t0:0,fired:false};
     if(hd.pose!==h.pose){hd.pose=h.pose;hd.t0=now;hd.fired=false}
-    const act=HOLD_ACT[h.pose];h.holdP=act&&!hd.fired?Math.min(1,(now-hd.t0)/1000):0;
-    if(act&&!hd.fired&&now-hd.t0>=1000){hd.fired=true;act[1]();toast(act[0])}}
+    const act=HOLD_ACT[h.pose];h.holdP=act&&!hd.fired?Math.min(1,(now-hd.t0)/HOLD_MS):0;
+    if(act&&!hd.fired&&now-hd.t0>=HOLD_MS){hd.fired=true;act[1]();toast(act[0])}}
   // dos manos abiertas: zoom
   if(open.length===2){const d=dist(open[0].s[9],open[1].s[9]);if(!twoOpen)twoOpen={d0:d,z0:zoom};zoom=Math.max(.6,Math.min(1.7,twoOpen.z0*d/twoOpen.d0))}else twoOpen=null;
-  for(const k of Object.keys(palmPrev))if(!hands.some(h=>h.k===k)){delete palmPrev[k];delete hold[k];delete poseMem[k]}}
-
+  for(const k of Object.keys(palmPrev))if(!hands.some(h=>h.k===k)){delete palmPrev[k];delete hold[k];delete poseMem[k];delete hov[k];delete fingers[k]}}
 /* calibración automática del pellizco */
 let cal=null,calTimer=0;
 function calShow(){$('calStep').textContent=cal.step===0?'Calibración · 1 de 2':'Calibración · 2 de 2';$('calText').textContent=cal.msg||(cal.step===0?'Muestra una mano abierta, con los dedos separados, a la distancia a la que vas a jugar.':'Ahora junta la punta del pulgar con la del índice y mantenla así.');$('calBar').firstElementChild.style.width=Math.min(100,cal.vals.length/30*100)+'%'}
@@ -408,7 +425,7 @@ function drawHands(){
     const d=drags[h.k],p=h.pinch?h.pp:h.tip;
     octx.shadowColor='#37e8ff';octx.shadowBlur=14;octx.fillStyle=h.pinch?'#fff':'#37e8ff';octx.beginPath();octx.arc(p.x,p.y,h.pinch?11:7,0,7);octx.fill();octx.shadowBlur=0;
     if(h.pinch){octx.strokeStyle=d&&d.phase==='layer'?'#ffd23f':'#fff';octx.lineWidth=3;octx.beginPath();octx.arc(p.x,p.y,19,0,7);octx.stroke()}
-    const lbl={point:'apuntar',pinch:d&&d.phase==='layer'?'moviendo capa':'agarrar',open:hands.filter(q=>q.pose==='open').length>1?'zoom':'girar cubo',victory:'deshacer',thumb:'hazlo por mí',fist:'centrar'}[h.pose];
+    const lbl={point:'apuntar',pinch:d&&d.phase==='layer'?'moviendo capa':'agarrar',open:hands.filter(q=>q.pose==='open').length>1?'zoom':'mano libre',victory:'deshacer',thumb:'hazlo por mí',fist:'girando el cubo'}[h.pose];
     if(lbl){const w=s[0];octx.font='700 15px Rajdhani,system-ui,sans-serif';octx.textAlign='center';octx.textBaseline='middle';const tw=octx.measureText(lbl).width+16;
       octx.fillStyle='rgba(2,20,28,.85)';octx.beginPath();octx.roundRect?octx.roundRect(w.x-tw/2,w.y+12,tw,24,8):octx.rect(w.x-tw/2,w.y+12,tw,24);octx.fill();octx.fillStyle='#37e8ff';octx.fillText(lbl,w.x,w.y+24.5)}
     if(h.holdP>0){const c=s[9];octx.strokeStyle='rgba(255,210,63,.3)';octx.lineWidth=5;octx.beginPath();octx.arc(c.x,c.y,30,0,7);octx.stroke();

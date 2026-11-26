@@ -48,7 +48,7 @@ button.on{background:rgba(55,232,255,.25)}
 <div id="scan"></div>
 <canvas id="ov"></canvas>
 <div id="top">
-  <button id="bMenu">Menú</button>
+  <button id="bMenu">⌂ Inicio</button>
   <div id="title">Viaje de escalas</div>
   <button id="bAuto">Viaje automático</button>
 </div>
@@ -72,6 +72,7 @@ button.on{background:rgba(55,232,255,.25)}
   </ul>
   <button id="start">Activar cámara</button>
   <button id="touch">Usar el dedo en la pantalla</button>
+  <button class="goHome">⌂ Volver al inicio</button>
   <p id="err" class="hide"></p>
 </div></div>
 
@@ -218,7 +219,7 @@ function jump(dir){stopAuto();const n=nearest();let i=n+dir;if(dir<0&&L[n].z<z-.
 function stopAuto(){auto=null;$('bAuto').classList.remove('on');$('bAuto').textContent='Viaje automático'}
 $('bSmall').onclick=()=>jump(-1);$('bBig').onclick=()=>jump(1);
 $('bAuto').onclick=()=>{if(auto){stopAuto();return}auto={phase:z>L[0].z+.5?'in':'out'};$('bAuto').classList.add('on');$('bAuto').textContent='Detener'};
-$('bMenu').onclick=()=>{location.href='../juegos/'};
+$('bMenu').onclick=()=>{location.href='../'};document.querySelectorAll('.goHome').forEach(b=>b.onclick=()=>{location.href='../'});
 
 /* ---------- dibujo principal ---------- */
 const stars=(()=>{const r=rng(1);return Array.from({length:140},()=>[r(),r(),r()])})();
