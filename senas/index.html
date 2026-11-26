@@ -284,11 +284,11 @@ function checkSpec(sp,F,k=1){if(!F)return{ok:false,msgs:['Pon la mano frente a l
   return{ok:!msgs.length,msgs,score:tot?good/tot:0}}
 // movimiento: se revisa sobre los cuadros capturados
 function checkMove(sp,frames){const F=frames.map(feats).filter(Boolean);if(F.length<8)return{ok:false,msg:'No vi bien tu mano. Intenta de nuevo'};
-  const shapeOK=F.filter(f=>checkSpec({...sp,mov:null,dir:null},f,1.25).ok).length/F.length;
+  const shapeSp=sp.mov==='G'?{f:'-ccc'}:{...sp,mov:null,dir:null};const shapeOK=F.filter(f=>checkSpec(shapeSp,f,1.3).ok).length/F.length;
   const hs=F[0].hs,tip=j=>F.map(f=>f.s[j]),span=(pts,k)=>Math.max(...pts.map(p=>p[k]))-Math.min(...pts.map(p=>p[k])),len=pts=>pts.slice(1).reduce((a,p,i)=>a+D2(p,pts[i]),0);
   const ang=F.map(f=>Math.atan2(f.s[9].y-f.s[0].y,f.s[9].x-f.s[0].x)*180/Math.PI);
   let mv=false,msg='';
-  if(sp.mov==='G'){const a=F.slice(0,4).map(f=>f.st[0]),b=F.slice(-6).map(f=>f.st[0]);mv=Math.max(...a)-Math.min(...b)>.12||F.slice(-6).some(f=>f.fs[0]!=='e');msg='Dobla el índice hacia abajo al final'}
+  if(sp.mov==='G'){const a=F.slice(0,5),b=F.slice(-8),rel=f=>(f.s[8].y-f.s[5].y)/f.hs;mv=Math.max(...a.map(f=>f.st[0]))-Math.min(...b.map(f=>f.st[0]))>.08||Math.max(...a.map(f=>f.far[0]))-Math.min(...b.map(f=>f.far[0]))>.12||Math.max(...b.map(rel))-Math.min(...a.map(rel))>.3||b.some(f=>f.fs[0]!=='e');msg='Dobla el índice hacia abajo al final'}
   if(sp.mov==='H'){const w=tip(0);mv=D2(w[0],w[w.length-1])/hs>.45||Math.abs(F[F.length-1].hs/hs-1)>.15;msg='Mueve la mano en la dirección de la flecha'}
   if(sp.mov==='J'){const p=tip(20);mv=(Math.max(...p.map(q=>q.y))-p[0].y)/hs>.35&&len(p)/hs>.9;msg='Dibuja la J con el meñique: baja y curva'}
   if(sp.mov==='Ñ'||sp.mov==='10'){mv=Math.max(...ang)-Math.min(...ang)>18||span(tip(0),'x')/hs>.35;msg='Mueve la muñeca de un lado a otro'}
@@ -339,7 +339,7 @@ function loadItem(){const it=cur.list[cur.i],r=refOf(it),sp=SPEC[it];$('pSign').
   $('pInfo').textContent=`${cur.lesson?cur.lesson.name+' · ':''}${cur.i+1} de ${cur.list.length} · ${kindOf(it)}`+(r?` · referencia ${r.type==='move'?'con movimiento':'quieta'}${r.n===2?', dos manos':''}`:'');
   $('pDict').href='https://educativo.insor.gov.co/diccionario/';
   $('pInfo').textContent+=sp?' · '+sp.d+(sp.approx?' (revisión aproximada: el pulgar queda oculto)':''):OFFICIAL[it]?' · '+OFFICIAL[it]:'';
-  if(sp){$('pHint').textContent=sp.mov?'Seña con movimiento: toca «Intentar» y hazla después de la cuenta':'Copia la manito y mantenla quieta';$('pTry').disabled=!sp.mov}
+  if(sp){$('pHint').textContent=sp.mov?'Seña con movimiento: pon la mano en la forma inicial y, cuando te diga, haz el movimiento':'Copia la manito y mantenla quieta';$('pTry').disabled=!sp.mov}
   else if(!r){$('pHint').textContent=OFFICIAL[it]?'Mira la seña oficial; aún no hay revisión automática para este número':'Aún no hay referencia: mira la seña oficial y practícala en el espejo';$('pTry').disabled=true}
   else if(r.type==='move'){$('pHint').textContent='Seña con movimiento: toca «Intentar» y hazla después de la cuenta';$('pTry').disabled=false}
   else{$('pHint').textContent='Haz la seña y mantenla quieta';$('pTry').disabled=true}
@@ -349,7 +349,18 @@ function next(ok){const it=cur.list[cur.i];if(ok){PROG[it]=Date.now();LS.set('ls
 $('pSkip').onclick=()=>next(false);$('pPrev').onclick=()=>{if(cur.i>0){cur.i--;loadItem()}};
 function success(){P.state='ok';$('pHint').innerHTML='<span class="ok">¡Bien hecho! ✓</span>';$('pMeter').firstElementChild.style.width='100%';setTimeout(()=>next(true),1100)}
 // seña quieta: se compara en vivo y se acepta al sostenerla un momento
-function evalRules(dt){const it=cur.list[cur.i],sp=SPEC[it];if(!sp||sp.mov||P.state!=='idle')return false;
+function startShape(sp){return sp.mov==='G'?{f:'eccc',d:sp.d}:{...sp,mov:null,dir:null}}
+// seña con movimiento: al sostener la forma inicial empieza a grabar sola (también sirve el botón «Intentar»)
+async function doMove(it,sp,withCount){P.state='busy';P.hold=0;
+  if(withCount){$('pHint').textContent='Prepárate…';await countdown()}
+  $('pHint').textContent='¡Ahora haz el movimiento!';await capture(1700);
+  if(cur.list[cur.i]!==it)return;const c=checkMove(sp,P.raw.filter(Boolean));
+  if(c.ok)success();else{$('pHint').textContent=c.msg+'. Vuelve a la forma inicial para intentarlo de nuevo';P.state='wait';setTimeout(()=>{if(P.state==='wait')P.state='idle'},1300)}}
+function evalRules(dt){const it=cur.list[cur.i],sp=SPEC[it];if(!sp||P.state!=='idle')return false;
+  if(sp.mov){const F=feats(avgRaw(rawBuf)),c=checkSpec(startShape(sp),F,tol()*1.15);$('pMeter').firstElementChild.style.width=(c.score*50)+'%';
+    if(c.ok){P.hold+=dt;$('pHint').textContent='Bien, quieta un instante…';if(P.hold>.45)doMove(it,sp,false)}
+    else{P.hold=Math.max(0,P.hold-dt*2);$('pHint').textContent='Para empezar: '+c.msgs.slice(0,2).join(' · ')}
+    return true}
   const F=feats(avgRaw(rawBuf)),c=checkSpec(sp,F,tol());$('pMeter').firstElementChild.style.width=(c.score*100)+'%';
   if(c.ok){P.hold+=dt;$('pHint').textContent='¡Así! Mantenla…';if(P.hold>.6)success()}
   else{P.hold=Math.max(0,P.hold-dt*2);$('pHint').textContent=c.msgs.slice(0,2).join(' · ')}
@@ -365,8 +376,7 @@ function evalStatic(f,dt){if(SPEC[cur.list[cur.i]]){evalRules(dt);return}const i
 async function countdown(){const c=$('count');c.classList.remove('hide');for(const n of['3','2','1']){c.textContent=n;await sleep(650)}c.textContent='¡Ya!';await sleep(300);c.classList.add('hide')}
 async function capture(ms){P.frames=[];P.raw=[];P.capturing=true;await sleep(ms);P.capturing=false;return P.frames.slice()}
 $('pTry').onclick=async()=>{const it=cur.list[cur.i],sp=SPEC[it];
-  if(sp&&sp.mov){if(P.state!=='idle')return;P.state='busy';$('pHint').textContent='Prepárate…';await countdown();$('pHint').textContent='¡Haz la seña!';await capture(1800);
-    const c=checkMove(sp,P.raw.filter(Boolean));if(c.ok)success();else{$('pHint').textContent=c.msg;P.state='idle'}return}
+  if(sp&&sp.mov){if(P.state==='idle'||P.state==='wait')doMove(it,sp,true);return}
   const r=refOf(it);if(!r||r.type!=='move'||P.state!=='idle')return;P.state='busy';$('pHint').textContent='Prepárate…';await countdown();$('pHint').textContent='¡Haz la seña!';
   const fr=(await capture(r.ms||1500)).filter(Boolean);if(fr.length<8){$('pHint').textContent='No vi bien tu mano. Intenta de nuevo';P.state='idle';return}
   const d=dtw(seqOf(fr),r.seq),pct=Math.max(0,Math.min(1,1-(d-.15)/.5));$('pMeter').firstElementChild.style.width=(pct*100)+'%';
@@ -418,7 +428,7 @@ function drawHands(res){octx.clearRect(0,0,innerWidth,innerHeight);if(!res)retur
   for(const lmk of res.landmarks){const s=lmk.map(toScreen);octx.strokeStyle='rgba(55,232,255,.85)';octx.lineWidth=3;octx.lineCap='round';octx.beginPath();for(const [a,b] of CON){octx.moveTo(s[a].x,s[a].y);octx.lineTo(s[b].x,s[b].y)}octx.stroke();
     octx.fillStyle='#fff';for(const p of s){octx.beginPath();octx.arc(p.x,p.y,3.5,0,7);octx.fill()}}}
 function frame(t){requestAnimationFrame(frame);const dt=Math.min(.05,(t-last)/1000);last=t;
-  if(ready&&lm&&video.readyState>=2&&video.currentTime!==lastVT){lastVT=video.currentTime;try{lastRes=lm.detectForVideo(video,t);pushRaw(lastRes);const f=frameOf(lastRes);if(P.capturing){P.frames.push(f);P.raw.push(pickHand(lastRes)?pickHand(lastRes).map(p=>({x:p.x*(video.videoWidth||640),y:p.y*(video.videoHeight||480)})):null)}if(screen==='prac')evalStatic(f,dt)}catch(e){console.log(e)}}
+  if(ready&&lm&&video.readyState>=2&&video.currentTime!==lastVT){lastVT=video.currentTime;try{lastRes=lm.detectForVideo(video,t);pushRaw(lastRes);const f=frameOf(lastRes);if(P.capturing){P.frames.push(f);P.raw.push(pickHand(lastRes)?pickHand(lastRes).map(p=>({x:p.x*(video.videoWidth||640),y:p.y*(video.videoHeight||480)})):null)}const dV=Math.min(.15,(t-(window.__lvT||t))/1000);window.__lvT=t;if(screen==='prac')evalStatic(f,dV)}catch(e){console.log(e)}}
   dwell(dt,lastRes);drawHands(screen==='prac'||screen==='lesson'?lastRes:lastRes);drawRef(t)}
 requestAnimationFrame(frame);
 function fail(m){$('err').textContent=m;$('err').classList.remove('hide');$('start').disabled=false;$('start').textContent='Reintentar'}
