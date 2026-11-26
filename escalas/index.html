@@ -1,0 +1,313 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<title>Viaje de escalas</title>
+<link href="https://fonts.googleapis.com/css2?family=Rajdhani:wght@500;700&display=swap" rel="stylesheet">
+<style>
+:root{--c:#37e8ff;--bg:#02070b;--ink:#d8fbff;--y:#ffd23f}
+*{box-sizing:border-box;min-width:0}
+html,body{margin:0;height:100%;background:var(--bg);color:var(--ink);font:16px/1.35 Rajdhani,system-ui,sans-serif;overflow:hidden;touch-action:none;user-select:none;-webkit-user-select:none}
+video{position:fixed;inset:0;width:100%;height:100%;object-fit:cover;opacity:.16;filter:saturate(.3) brightness(.8);transform:scaleX(-1)}
+canvas{position:fixed;inset:0;width:100%;height:100%}
+#ov{pointer-events:none;z-index:3}
+#scan{position:fixed;inset:0;pointer-events:none;background:repeating-linear-gradient(0deg,rgba(55,232,255,.04) 0 1px,transparent 1px 4px)}
+button{--p:0;font:inherit;font-weight:700;color:var(--c);border:1px solid var(--c);border-radius:10px;min-height:44px;padding:0 12px;cursor:pointer;
+  background:linear-gradient(90deg,rgba(55,232,255,.32) calc(var(--p)*100%),rgba(2,20,28,.82) 0)}
+button:focus-visible{outline:2px solid #fff;outline-offset:2px}
+button.on{background:rgba(55,232,255,.25)}
+#top{position:fixed;left:0;right:0;top:0;z-index:2;display:flex;gap:6px;align-items:center;padding:max(10px,env(safe-area-inset-top)) 10px 0}
+#title{flex:1;text-align:center;font-weight:700;font-size:17px;text-shadow:0 0 10px var(--c);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+#scale{position:fixed;left:50%;top:62px;transform:translateX(-50%);z-index:2;text-align:center;pointer-events:none}
+#sExp{font-size:15px;color:var(--y);font-weight:700}
+#sLen{font-size:28px;font-weight:700;color:#fff;text-shadow:0 0 14px var(--c);white-space:nowrap}
+#panel{position:fixed;left:0;right:0;bottom:0;z-index:2;padding:10px 10px max(10px,env(safe-area-inset-bottom));background:linear-gradient(to top,rgba(2,7,11,.95) 70%,rgba(2,7,11,0));display:flex;flex-direction:column;gap:8px;max-width:760px;margin:0 auto}
+#info{border:1px solid rgba(55,232,255,.35);border-radius:12px;padding:10px 12px;background:rgba(2,20,28,.72);min-height:104px}
+#iName{font-size:24px;font-weight:700;color:var(--c);text-shadow:0 0 10px var(--c);line-height:1.1}
+#iSize{font-size:15px;color:var(--y);font-weight:700;margin:2px 0 4px}
+#iFact{font-size:16px;color:rgba(216,251,255,.9)}
+.row{display:flex;gap:6px}.row button{flex:1}
+#track{position:fixed;right:6px;top:120px;bottom:300px;width:34px;z-index:2}
+#track canvas{position:absolute;inset:0;width:100%;height:100%;pointer-events:auto}
+.sheet{position:fixed;inset:0;z-index:5;display:grid;place-items:center;padding:20px;background:radial-gradient(circle at 50% 30%,rgba(6,48,58,.95),rgba(2,7,11,.98) 70%);overflow:auto}
+.sheet .box{width:100%;max-width:460px}
+.sheet h1{font-size:40px;line-height:1.05;margin:0 0 8px;color:var(--c);text-shadow:0 0 16px var(--c)}
+.sheet li,.sheet p{color:rgba(216,251,255,.88)}
+.sheet ul{padding-left:20px}
+.sheet button{width:100%;margin-top:8px;min-height:50px;font-size:18px}
+#err{color:#ff9a9a}
+.hide{display:none!important}
+@media (min-width:700px){#panel{left:auto;right:12px;bottom:12px;width:420px;background:none}#track{bottom:40px}}
+@media (prefers-reduced-motion:reduce){#scan{display:none}}
+</style>
+</head>
+<body>
+<video id="video" playsinline muted></video>
+<canvas id="cv"></canvas>
+<div id="scan"></div>
+<canvas id="ov"></canvas>
+<div id="top">
+  <button id="bMenu">Menú</button>
+  <div id="title">Viaje de escalas</div>
+  <button id="bAuto">Viaje automático</button>
+</div>
+<div id="scale"><div id="sExp"></div><div id="sLen"></div></div>
+<div id="track"><canvas id="tr"></canvas></div>
+<div id="panel">
+  <div id="info"><div id="iName"></div><div id="iSize"></div><div id="iFact"></div></div>
+  <div class="row">
+    <button id="bSmall">◀ Más pequeño</button>
+    <button id="bBig">Más grande ▶</button>
+  </div>
+</div>
+<div id="intro" class="sheet"><div class="box">
+  <h1>Viaje de escalas</h1>
+  <p>Empiezas en una persona. Desde ahí puedes ir hasta los quarks o hasta el universo observable.</p>
+  <ul>
+    <li>🙌 <b>Dos manos abiertas</b>: sepáralas para acercarte, júntalas para alejarte.</li>
+    <li>🤏 <b>Pellizco</b> y mover la mano: hacia arriba te alejas, hacia abajo te acercas.</li>
+    <li>☝️ Deja el <b>índice quieto</b> sobre un botón para presionarlo.</li>
+    <li>En la pantalla: pellizca con dos dedos o arrastra hacia arriba o abajo.</li>
+  </ul>
+  <button id="start">Activar cámara</button>
+  <button id="touch">Usar el dedo en la pantalla</button>
+  <p id="err" class="hide"></p>
+</div></div>
+
+<script type="module">
+import {FilesetResolver, HandLandmarker} from 'https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@0.10.14/vision_bundle.mjs';
+{
+const $=id=>document.getElementById(id);
+const WASM='https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@0.10.14/wasm';
+const MODEL='https://storage.googleapis.com/mediapipe-models/hand_landmarker/hand_landmarker/float16/1/hand_landmarker.task';
+const C='#37e8ff',Y='#ffd23f',M='#ff4fd8',G='#5dff9a',O='#ff9a3c',W='#e9fdff',B='#5b8cff';
+const cv=$('cv'),ctx=cv.getContext('2d'),ov=$('ov'),octx=ov.getContext('2d'),trc=$('tr'),tctx=trc.getContext('2d');
+let VW=0,VH=0,DPR=1;
+function size(){VW=innerWidth;VH=innerHeight;DPR=Math.min(devicePixelRatio||1,2);
+  for(const [c,x] of [[cv,ctx],[ov,octx]]){c.width=VW*DPR;c.height=VH*DPR;x.setTransform(DPR,0,0,DPR,0,0)}
+  const r=trc.getBoundingClientRect();trc.width=r.width*DPR;trc.height=r.height*DPR;tctx.setTransform(DPR,0,0,DPR,0,0)}
+addEventListener('resize',size);
+
+/* ---------- utilidades de dibujo ---------- */
+function rng(seed){return()=>{seed|=0;seed=seed+0x6D2B79F5|0;let t=Math.imul(seed^seed>>>15,1|seed);t=t+Math.imul(t^t>>>7,61|t)^t;return((t^t>>>14)>>>0)/4294967296}}
+function circ(x,y,r,stroke,fill,lw=2){ctx.beginPath();ctx.arc(x,y,Math.max(.5,r),0,Math.PI*2);if(fill){ctx.fillStyle=fill;ctx.fill()}if(stroke){ctx.strokeStyle=stroke;ctx.lineWidth=lw;ctx.stroke()}}
+function glow(col,b){ctx.shadowColor=col;ctx.shadowBlur=b}
+function noGlow(){ctx.shadowBlur=0}
+function label(t,x,y,sz=14,col=W,al='center'){ctx.font=`700 ${sz}px Rajdhani,system-ui,sans-serif`;ctx.textAlign=al;ctx.textBaseline='middle';ctx.fillStyle=col;ctx.fillText(t,x,y)}
+function poly(pts,stroke,fill,lw=2){ctx.beginPath();pts.forEach(([x,y],i)=>i?ctx.lineTo(x,y):ctx.moveTo(x,y));ctx.closePath();if(fill){ctx.fillStyle=fill;ctx.fill()}if(stroke){ctx.strokeStyle=stroke;ctx.lineWidth=lw;ctx.stroke()}}
+const LS=u=>Math.max(11,Math.min(16,u*.035)); // tamaño de etiquetas
+
+/* ---------- escenas: cada una dibuja su campo de visión (ancho = u píxeles) ---------- */
+const COL_OUTLINE=[[-71.7,12.45],[-71.1,11.9],[-72.2,11.1],[-72.5,10],[-73,9.2],[-72.8,8.3],[-72.4,7.5],[-71.5,7],[-70.1,6.9],[-69.4,6.1],[-67.8,6.2],[-67.4,5.3],[-67.8,4.5],[-67.6,3.3],[-67.3,2.2],[-68.2,1.9],[-69.8,1.1],[-70,.5],[-70,-.2],[-69.4,-1.1],[-69.9,-4.2],[-70.7,-3.8],[-72,-2.4],[-73.1,-1],[-74.8,-.2],[-77,.4],[-78.8,1.4],[-78.8,1.8],[-77.9,2.6],[-77.4,4],[-77.4,5.6],[-77.6,6.8],[-77.9,7.2],[-77.2,7.9],[-77,8.6],[-76.8,8.6],[-76.2,9.3],[-75.6,10.4],[-74.9,11],[-74.2,11.2],[-73.3,11.3],[-72.2,11.9]];
+const L=[
+ {z:-14.8,name:'Protón',fact:'Cada protón está hecho de tres quarks (dos «arriba» y uno «abajo») unidos por gluones. Aquí termina, por ahora, nuestro viaje hacia lo pequeño.',
+  draw(u,t){glow(C,14);circ(0,0,u*.32,C,'rgba(55,232,255,.06)',2);noGlow();const q=[[Y,'u'],[Y,'u'],[M,'d']].map(([c,l],i)=>{const a=t*.6+i*2.094;return{x:Math.cos(a)*u*.15,y:Math.sin(a)*u*.15,c,l}});
+   ctx.strokeStyle='rgba(93,255,154,.7)';ctx.lineWidth=2;for(let i=0;i<3;i++){const a=q[i],b=q[(i+1)%3];ctx.beginPath();for(let s=0;s<=30;s++){const f=s/30,nx=-(b.y-a.y),ny=b.x-a.x,l=Math.hypot(nx,ny)||1,w=Math.sin(f*Math.PI*8+t*6)*u*.012;const x=a.x+(b.x-a.x)*f+nx/l*w,y=a.y+(b.y-a.y)*f+ny/l*w;s?ctx.lineTo(x,y):ctx.moveTo(x,y)}ctx.stroke()}
+   for(const k of q){glow(k.c,16);circ(k.x,k.y,u*.055,null,k.c);noGlow();label(k.l,k.x,k.y,LS(u)+4,'#02070b')}label('quarks y gluones',0,u*.38,LS(u),C)}},
+ {z:-13.8,name:'Núcleo atómico',fact:'El núcleo de un átomo de carbono tiene 6 protones y 6 neutrones, apretados en unos pocos femtómetros.',
+  draw(u,t){const n=12;for(let i=0;i<n;i++){const a=i*2.4,r=u*.055*Math.sqrt(i+.5),x=Math.cos(a)*r,y=Math.sin(a)*r,col=i%2?C:Y;glow(col,10);circ(x,y,u*.06,W,col==C?'rgba(55,232,255,.75)':'rgba(255,210,63,.85)',1);noGlow()}
+   label('protones',-u*.3,u*.34,LS(u),Y);label('neutrones',u*.3,u*.34,LS(u),C)}},
+ {z:-9.7,name:'Átomo',fact:'El núcleo es unas 100.000 veces más pequeño que el átomo: casi todo el átomo es espacio vacío con electrones alrededor.',
+  draw(u,t){const g=ctx.createRadialGradient(0,0,0,0,0,u*.36);g.addColorStop(0,'rgba(55,232,255,.25)');g.addColorStop(1,'rgba(55,232,255,0)');ctx.fillStyle=g;ctx.beginPath();ctx.arc(0,0,u*.36,0,7);ctx.fill();
+   for(let i=0;i<3;i++){ctx.save();ctx.rotate(i*1.05);ctx.strokeStyle='rgba(55,232,255,.55)';ctx.lineWidth=1.5;ctx.beginPath();ctx.ellipse(0,0,u*.32,u*.11,0,0,7);ctx.stroke();const a=t*(1.4+i*.3)+i;glow(C,12);circ(Math.cos(a)*u*.32,Math.sin(a)*u*.11,u*.014+1,null,W);noGlow();ctx.restore()}
+   glow(Y,14);circ(0,0,Math.max(2,u*.01),null,Y);noGlow();label('núcleo',u*.06,-u*.03,LS(u),Y,'left');label('nube de electrones',0,u*.4,LS(u),C)}},
+ {z:-8.3,name:'ADN',fact:'La doble hélice del ADN mide unos 2 nm de ancho. Cada una de tus células guarda cerca de 2 metros de ADN muy enrollado.',
+  draw(u,t){const amp=u*.1,wl=u*.68,x0=-u*.5,ph=t*.8;const pc=[Y,C,M,G];
+   for(let i=0;i<=40;i++){const x=x0+i*u/40,a=(x/wl)*Math.PI*2+ph,y1=Math.sin(a)*amp,y2=Math.sin(a+Math.PI)*amp;if(i%2===0){ctx.strokeStyle=pc[i/2%4];ctx.globalAlpha*=.8;ctx.lineWidth=3;ctx.beginPath();ctx.moveTo(x,y1);ctx.lineTo(x,y2);ctx.stroke();ctx.globalAlpha/=.8}}
+   for(const off of[0,Math.PI]){glow(C,10);ctx.strokeStyle=W;ctx.lineWidth=3;ctx.beginPath();for(let i=0;i<=120;i++){const x=x0+i*u/120,y=Math.sin((x/wl)*Math.PI*2+ph+off)*amp;i?ctx.lineTo(x,y):ctx.moveTo(x,y)}ctx.stroke();noGlow()}
+   label('doble hélice',0,u*.2,LS(u),C)}},
+ {z:-6.7,name:'Virus',fact:'Un virus de la gripe mide unos 100 nm. En el grosor de un cabello cabrían unos mil, uno al lado del otro.',
+  draw(u,t){const r=u*.25;glow(M,14);circ(0,0,r,M,'rgba(255,79,216,.08)',2.5);noGlow();
+   for(let i=0;i<28;i++){const a=i/28*Math.PI*2+t*.1,x1=Math.cos(a)*r,y1=Math.sin(a)*r,x2=Math.cos(a)*r*1.18,y2=Math.sin(a)*r*1.18;ctx.strokeStyle=M;ctx.lineWidth=2;ctx.beginPath();ctx.moveTo(x1,y1);ctx.lineTo(x2,y2);ctx.stroke();circ(x2,y2,u*.012+1,null,Y)}
+   ctx.setLineDash([4,5]);circ(0,0,r*.6,'rgba(255,79,216,.6)',null,1.5);ctx.setLineDash([]);label('material genético',0,0,LS(u),M)}},
+ {z:-4.6,name:'Célula',fact:'Una célula humana típica mide entre 10 y 30 micrómetros. Tu cuerpo tiene alrededor de 37 billones de ellas.',
+  draw(u,t){const rr=rng(7),pts=[];for(let i=0;i<40;i++){const a=i/40*Math.PI*2,r=u*.3*(1+Math.sin(a*3+t*.5)*.04+Math.sin(a*5)*.03);pts.push([Math.cos(a)*r,Math.sin(a)*r])}
+   glow(G,14);poly(pts,G,'rgba(93,255,154,.06)',2.5);noGlow();circ(u*.02,-u*.02,u*.1,C,'rgba(55,232,255,.15)',2);circ(u*.04,-u*.03,u*.03,null,'rgba(55,232,255,.6)');
+   for(let i=0;i<5;i++){const a=rr()*6.28,d=u*(.15+rr()*.08);ctx.save();ctx.translate(Math.cos(a)*d,Math.sin(a)*d);ctx.rotate(a);ctx.strokeStyle=O;ctx.lineWidth=2;ctx.beginPath();ctx.ellipse(0,0,u*.04,u*.017,0,0,7);ctx.stroke();ctx.restore()}
+   label('núcleo',u*.02,-u*.15,LS(u),C);label('mitocondrias',0,u*.36,LS(u),O)}},
+ {z:-1.7,name:'Punta del dedo',fact:'Las crestas de tu huella digital están separadas menos de medio milímetro, y su dibujo es único: ni los gemelos idénticos lo comparten.',
+  draw(u,t){glow(C,8);ctx.strokeStyle=C;ctx.lineWidth=2;for(let i=1;i<=13;i++){const rx=u*.025*i,ry=u*.034*i;ctx.globalAlpha*=.85;ctx.beginPath();ctx.ellipse(0,u*.05,rx,ry,0,Math.PI*1.05,Math.PI*2.95);ctx.stroke();ctx.globalAlpha/=.85}noGlow()}},
+ {z:.4,name:'Persona',fact:'Mides alrededor de 1,7 metros. Desde aquí puedes viajar hacia lo más pequeño o hacia lo más grande del universo.',
+  draw(u,t){const h=u*.68,y0=u*.34;ctx.strokeStyle='rgba(93,255,154,.6)';ctx.lineWidth=2;ctx.beginPath();ctx.moveTo(-u*.5,y0);ctx.lineTo(u*.5,y0);ctx.stroke();
+   glow(C,16);ctx.strokeStyle=C;ctx.lineWidth=Math.max(2,u*.02);ctx.lineCap='round';const hy=y0-h;circ(0,hy+h*.07,h*.07,C,'rgba(55,232,255,.15)',ctx.lineWidth);
+   ctx.beginPath();ctx.moveTo(0,hy+h*.15);ctx.lineTo(0,hy+h*.55);ctx.moveTo(0,hy+h*.55);ctx.lineTo(-h*.1,y0);ctx.moveTo(0,hy+h*.55);ctx.lineTo(h*.1,y0);
+   const sw=Math.sin(t*2)*.08;ctx.moveTo(0,hy+h*.22);ctx.lineTo(-h*.17,hy+h*(.42+sw));ctx.moveTo(0,hy+h*.22);ctx.lineTo(h*.17,hy+h*(.42-sw));ctx.stroke();noGlow();ctx.lineCap='butt';
+   label('tú · 1,7 m',u*.18,hy+h*.1,LS(u),Y,'left')}},
+ {z:2.15,name:'Cancha de fútbol',fact:'Una cancha profesional mide unos 105 × 68 metros. Ahí adentro, una persona es apenas un punto.',
+  draw(u,t){const w=u*.75,h=u*.486;ctx.fillStyle='rgba(93,255,154,.08)';ctx.fillRect(-w/2,-h/2,w,h);ctx.strokeStyle=W;ctx.lineWidth=2;ctx.strokeRect(-w/2,-h/2,w,h);
+   ctx.beginPath();ctx.moveTo(0,-h/2);ctx.lineTo(0,h/2);ctx.stroke();circ(0,0,u*.065,W,null,2);
+   for(const s of[-1,1]){ctx.strokeRect(s>0?w/2-u*.157:-w/2,-u*.192,u*.157,u*.384);ctx.strokeRect(s>0?w/2-u*.052:-w/2,-u*.087,u*.052,u*.175)}
+   glow(Y,12);circ(0,0,3,null,Y);noGlow();label('tú',8,-8,LS(u),Y,'left')}},
+ {z:3.5,name:'Pueblo',fact:'Un pueblo pequeño se cruza caminando en unos 20 o 30 minutos.',
+  draw(u,t){const rr=rng(11),g=u*.05;ctx.strokeStyle='rgba(55,232,255,.35)';ctx.lineWidth=1.5;
+   for(let i=-7;i<=7;i++){ctx.beginPath();ctx.moveTo(i*g,-u*.38);ctx.lineTo(i*g,u*.38);ctx.stroke();ctx.beginPath();ctx.moveTo(-u*.38,i*g);ctx.lineTo(u*.38,i*g);ctx.stroke()}
+   for(let i=-7;i<7;i++)for(let j=-7;j<7;j++){if(Math.hypot(i+.5,j+.5)>7.2||(Math.abs(i+.5)<1&&Math.abs(j+.5)<1)||rr()<.25)continue;ctx.fillStyle=rr()<.15?'rgba(255,154,60,.55)':'rgba(55,232,255,.28)';ctx.fillRect(i*g+g*.18,j*g+g*.18,g*.64,g*.64)}
+   ctx.fillStyle='rgba(93,255,154,.35)';ctx.fillRect(-g,-g,g*2,g*2);label('plaza',0,0,LS(u),G);ctx.strokeStyle=W;ctx.strokeRect(u*.12,u*.12,u*.035,u*.023)}},
+ {z:4.6,name:'Ciudad',fact:'Una gran ciudad puede medir más de 30 km de lado a lado y tener millones de habitantes.',
+  draw(u,t){const rr=rng(5),pts=[];for(let i=0;i<36;i++){const a=i/36*6.28,r=u*(.3+Math.sin(a*3)*.04+Math.sin(a*7+1)*.025);pts.push([Math.cos(a)*r*.85,Math.sin(a)*r*1.1])}
+   poly(pts,'rgba(55,232,255,.5)','rgba(55,232,255,.05)',1.5);
+   for(let i=0;i<700;i++){const x=(rr()-.5)*u*.62,y=(rr()-.5)*u*.75;if((x/(u*.27))**2+(y/(u*.34))**2>1)continue;ctx.fillStyle=rr()<.2?Y:'rgba(216,251,255,.7)';ctx.fillRect(x,y,1.6,1.6)}
+   ctx.strokeStyle='rgba(91,140,255,.8)';ctx.lineWidth=3;ctx.beginPath();for(let i=0;i<=30;i++){const y=-u*.45+i*u*.03,x=-u*.3+Math.sin(i*.5)*u*.05+i*u*.008;i?ctx.lineTo(x,y):ctx.moveTo(x,y)}ctx.stroke();
+   ctx.strokeStyle='rgba(255,154,60,.8)';ctx.lineWidth=2;ctx.beginPath();ctx.moveTo(-u*.45,u*.1);ctx.lineTo(u*.45,-u*.05);ctx.moveTo(u*.05,-u*.45);ctx.lineTo(-u*.02,u*.45);ctx.stroke();
+   for(let i=0;i<5;i++){const x=u*(.33+i*.03),y=-u*.3+i*u*.13;poly([[x-u*.05,y+u*.05],[x,y-u*.05],[x+u*.05,y+u*.05]],'rgba(93,255,154,.6)',null,1.5)}
+   label('río',-u*.34,-u*.32,LS(u),B);label('montañas',u*.38,u*.36,LS(u),G)}},
+ {z:6.35,name:'Colombia',fact:'Colombia mide casi 1.900 km de norte a sur y tiene costas en el mar Caribe y en el océano Pacífico.',
+  draw(u,t){const k=u*111/2240,lon0=-73,lat0=4.2,P=([lo,la])=>[(lo-lon0)*k,-(la-lat0)*k];
+   glow(Y,14);poly(COL_OUTLINE.map(P),Y,'rgba(255,210,63,.07)',2.5);noGlow();
+   const cities=[['Bogotá',-74.07,4.71],['Medellín',-75.57,6.25],['Cali',-76.53,3.45],['Barranquilla',-74.8,10.96],['Cartagena',-75.5,10.4]];
+   for(const [n,lo,la] of cities){const [x,y]=P([lo,la]);circ(x,y,3,null,W);label(n,x+6,y,LS(u)*.9,W,'left')}
+   label('mar Caribe',P([-77,12.2])[0],P([-77,12.2])[1],LS(u),B);label('océano',P([-80.8,3.6])[0],P([-80.8,3.6])[1],LS(u),B);label('Pacífico',P([-80.8,3.6])[0],P([-80.8,3.6])[1]+LS(u)+2,LS(u),B)}},
+ {z:7.25,name:'La Tierra',fact:'La Tierra mide 12.742 km de diámetro. La luz podría darle más de 7 vueltas en un solo segundo.',
+  draw(u,t){const r=u*.358,g=ctx.createRadialGradient(-r*.3,-r*.3,r*.1,0,0,r);g.addColorStop(0,'rgba(91,140,255,.45)');g.addColorStop(1,'rgba(10,30,70,.6)');
+   glow(B,22);circ(0,0,r,C,g,2);noGlow();ctx.save();ctx.beginPath();ctx.arc(0,0,r,0,7);ctx.clip();ctx.strokeStyle='rgba(55,232,255,.35)';ctx.lineWidth=1;
+   for(let i=-2;i<=2;i++){ctx.beginPath();ctx.ellipse(0,i*r*.35,r*Math.sqrt(1-(i*.35)**2),r*.06,0,0,7);ctx.stroke()}
+   for(let i=0;i<6;i++){const a=(i/6)*Math.PI+t*.15;ctx.beginPath();ctx.ellipse(0,0,Math.abs(Math.cos(a))*r,r,0,0,7);ctx.stroke()}
+   const sa=[[-.05,-.32],[.12,-.28],[.2,-.1],[.18,.08],[.1,.28],[0,.42],[-.05,.3],[-.12,.05],[-.15,-.15]].map(([x,y])=>[x*r*1.4-r*.05,y*r*1.4+r*.05]);
+   poly(sa,G,'rgba(93,255,154,.25)',1.5);ctx.restore();glow(Y,10);circ(-r*.1,-r*.38,3,null,Y);noGlow();label('estás aquí',-r*.1+6,-r*.38,LS(u),Y,'left')}},
+ {z:8.95,name:'La Tierra y la Luna',fact:'La Luna está a unos 384.400 km. Su luz tarda poco más de 1 segundo en llegar hasta tus ojos.',
+  draw(u,t){const ex=-u*.2,d=u*.427;ctx.setLineDash([3,6]);circ(ex,0,d,'rgba(216,251,255,.35)',null,1);ctx.setLineDash([]);
+   glow(B,14);circ(ex,0,Math.max(4,u*.007),null,B);noGlow();const a=t*.15;glow(W,10);circ(ex+Math.cos(a)*d,Math.sin(a)*d,Math.max(3,u*.002),null,W);noGlow();
+   label('Tierra',ex,-14,LS(u),B);label('Luna',ex+Math.cos(a)*d,Math.sin(a)*d-12,LS(u),W)}},
+ {z:13,name:'Sistema solar',fact:'Neptuno está a unos 4.500 millones de km del Sol: su luz tarda más de 4 horas en llegar hasta allá.',
+  draw(u,t){const au=u/(1e13/1.496e11),pl=[['Mercurio',.39,W],['Venus',.72,Y],['Tierra',1,B],['Marte',1.52,O],['Júpiter',5.2,O],['Saturno',9.5,Y],['Urano',19.2,C],['Neptuno',30.1,B]];
+   glow(Y,24);circ(0,0,Math.max(5,u*.01),null,Y);noGlow();
+   pl.forEach(([n,d,c],i)=>{const r=d*au;circ(0,0,r,'rgba(216,251,255,.22)',null,1);const a=t*.6/Math.sqrt(d)+i*1.7;circ(Math.cos(a)*r,Math.sin(a)*r,i>3?4:2.5,null,c);if(i>3)label(n,Math.cos(a)*r,Math.sin(a)*r-12,LS(u),c)});
+   label('Sol',0,18,LS(u),Y)}},
+ {z:17.28,name:'Estrellas vecinas',fact:'La estrella más cercana al Sol, Próxima Centauri, está a 4,2 años luz: su luz tarda más de 4 años en llegarnos.',
+  draw(u,t){const rr=rng(3),ly=u/20;for(let i=0;i<120;i++){const x=(rr()-.5)*u,y=(rr()-.5)*u;circ(x,y,rr()*1.2+.4,null,'rgba(216,251,255,.5)')}
+   glow(Y,14);circ(0,0,4,null,Y);noGlow();label('Sol',0,14,LS(u),Y);
+   const st=[['Alfa Centauri · 4,4 años luz',4.37,2.4,W],['Estrella de Barnard · 6 años luz',5.96,-1,O],['Sirio · 8,6 años luz',8.6,.6,C]];
+   for(const [n,d,a,c] of st){const x=Math.cos(a)*d*ly,y=Math.sin(a)*d*ly;glow(c,12);circ(x,y,4,null,c);noGlow();ctx.setLineDash([2,5]);ctx.strokeStyle='rgba(216,251,255,.25)';ctx.beginPath();ctx.moveTo(0,0);ctx.lineTo(x,y);ctx.stroke();ctx.setLineDash([]);label(n,x,y-13,LS(u),c)}}},
+ {z:21.1,name:'Vía Láctea',fact:'Nuestra galaxia mide unos 100.000 años luz de lado a lado y tiene entre 100.000 y 400.000 millones de estrellas.',
+  draw(u,t){const rr=rng(9),R=u*.36;ctx.save();ctx.rotate(t*.02);const g=ctx.createRadialGradient(0,0,0,0,0,R*.3);g.addColorStop(0,'rgba(255,230,170,.7)');g.addColorStop(1,'rgba(255,230,170,0)');ctx.fillStyle=g;ctx.beginPath();ctx.arc(0,0,R*.3,0,7);ctx.fill();
+   for(let i=0;i<1400;i++){const arm=i%4,f=rr(),r=R*(.12+f*.88),a=arm*Math.PI/2+Math.log(r/(R*.1))*1.8+(rr()-.5)*.5;ctx.fillStyle=rr()<.2?'rgba(255,210,63,.8)':'rgba(170,230,255,.75)';ctx.fillRect(Math.cos(a)*r,Math.sin(a)*r,1.5,1.5)}
+   ctx.restore();const sx=Math.cos(2.2)*R*.52,sy=Math.sin(2.2)*R*.52;glow(Y,12);circ(sx,sy,4,Y,null,2);noGlow();label('estás aquí',sx+8,sy,LS(u),Y,'left')}},
+ {z:22.9,name:'Grupo Local',fact:'Andrómeda, la gran galaxia vecina, está a 2,5 millones de años luz y se acerca poco a poco a la nuestra.',
+  draw(u,t){const rr=rng(4);function gal(x,y,r,rot,col){ctx.save();ctx.translate(x,y);ctx.rotate(rot);ctx.scale(1,.45);const g=ctx.createRadialGradient(0,0,0,0,0,r);g.addColorStop(0,col);g.addColorStop(1,'rgba(0,0,0,0)');ctx.fillStyle=g;ctx.beginPath();ctx.arc(0,0,r,0,7);ctx.fill();ctx.restore()}
+   gal(-u*.15,u*.05,u*.07,.3,'rgba(170,230,255,.9)');gal(u*.14,-u*.06,u*.1,-.6,'rgba(255,220,180,.9)');gal(u*.2,u*.05,u*.035,.8,'rgba(170,230,255,.7)');
+   for(let i=0;i<40;i++)circ((rr()-.5)*u*.8,(rr()-.5)*u*.7,1.2,null,'rgba(216,251,255,.5)');
+   label('Vía Láctea',-u*.15,u*.13,LS(u),C);label('Andrómeda',u*.14,-u*.15,LS(u),O);label('Triángulo',u*.2,u*.11,LS(u),W)}},
+ {z:24.8,name:'Supercúmulo Laniakea',fact:'Laniakea, nuestro supercúmulo, mide unos 520 millones de años luz y reúne alrededor de 100.000 galaxias.',
+  draw(u,t){const rr=rng(21),nodes=[];for(let i=0;i<60;i++)nodes.push([(rr()-.5)*u*.9,(rr()-.5)*u*.8]);
+   ctx.strokeStyle='rgba(55,232,255,.25)';ctx.lineWidth=1.2;for(const a of nodes){const near=nodes.map(b=>[Math.hypot(a[0]-b[0],a[1]-b[1]),b]).sort((p,q)=>p[0]-q[0]).slice(1,4);for(const [,b] of near){ctx.beginPath();ctx.moveTo(a[0],a[1]);ctx.lineTo(b[0],b[1]);ctx.stroke()}}
+   for(const [x,y] of nodes){for(let k=0;k<6;k++)circ(x+(rr()-.5)*u*.03,y+(rr()-.5)*u*.03,1.1,null,'rgba(216,251,255,.75)')}
+   glow(Y,10);circ(nodes[0][0],nodes[0][1],4,Y,null,2);noGlow();label('estamos aquí',nodes[0][0]+8,nodes[0][1],LS(u),Y,'left')}},
+ {z:26.95,name:'Universo observable',fact:'Lo que podemos ver del universo mide unos 93.000 millones de años luz de diámetro. Más allá, la luz todavía no ha tenido tiempo de llegarnos.',
+  draw(u,t){const R=u*.47,rr=rng(33);const g=ctx.createRadialGradient(0,0,R*.85,0,0,R);g.addColorStop(0,'rgba(255,154,60,0)');g.addColorStop(1,'rgba(255,154,60,.45)');ctx.fillStyle=g;ctx.beginPath();ctx.arc(0,0,R,0,7);ctx.fill();
+   for(let i=0;i<1600;i++){const a=rr()*6.28,r=Math.sqrt(rr())*R*.96,cl=Math.sin(a*7)*Math.sin(r*.05)>.1;if(!cl&&rr()<.6)continue;ctx.fillStyle='rgba(170,230,255,.6)';ctx.fillRect(Math.cos(a)*r,Math.sin(a)*r,1.3,1.3)}
+   glow(Y,12);circ(0,0,4,null,Y);noGlow();label('nosotros, en el centro de lo que vemos',0,16,LS(u),Y);label('luz más antigua: fondo cósmico',0,-R-12,LS(u),O)}},
+];
+const ZMIN=L[0].z-.4,ZMAX=L[L.length-1].z+.3;
+
+/* ---------- formato de longitudes ---------- */
+function num(v,d=0){return v.toLocaleString('es-CO',{maximumFractionDigits:d,minimumFractionDigits:0})}
+function fmtLen(m){const LY=9.461e15;
+  if(m<1e-12)return num(m/1e-15,m<1e-14?1:0)+' femtómetros';if(m<1e-9)return num(m/1e-12,m<1e-11?1:0)+' picómetros';if(m<1e-6)return num(m/1e-9,m<1e-8?1:0)+' nanómetros';
+  if(m<1e-3)return num(m/1e-6,m<1e-5?1:0)+' micrómetros';if(m<1e-2)return num(m*1000,1)+' milímetros';if(m<1)return num(m*100,m<.1?1:0)+' centímetros';if(m<1e3)return num(m,m<10?1:0)+' metros';
+  if(m<1e9)return num(m/1e3,m<1e4?1:0)+' km';if(m<1e12)return num(m/1e9,m<1e10?1:0)+' millones de km';if(m<LY*.05)return num(m/1e12,1)+' mil millones de km';
+  const ly=m/LY;if(ly<1000)return num(ly,ly<10?1:0)+' años luz';if(ly<1e6)return num(ly/1e3,ly<1e4?1:0)+' mil años luz';if(ly<1e9)return num(ly/1e6,ly<1e7?1:0)+' millones de años luz';return num(ly/1e9,ly<1e10?1:0)+' mil millones de años luz'}
+const SUP={'-':'⁻','0':'⁰','1':'¹','2':'²','3':'³','4':'⁴','5':'⁵','6':'⁶','7':'⁷','8':'⁸','9':'⁹'};
+const expTxt=e=>'10'+String(e).split('').map(c=>SUP[c]).join('')+' m';
+
+/* ---------- estado del zoom ---------- */
+let z=L[7].z,zt=z,auto=null,lastLevel=-1;
+const clampZ=v=>Math.max(ZMIN,Math.min(ZMAX,v));
+function nearest(){let b=0;for(let i=1;i<L.length;i++)if(Math.abs(L[i].z-z)<Math.abs(L[b].z-z))b=i;return b}
+function jump(dir){stopAuto();const n=nearest();let i=n+dir;if(dir<0&&L[n].z<z-.05)i=n;if(dir>0&&L[n].z>z+.05)i=n;i=Math.max(0,Math.min(L.length-1,i));zt=L[i].z}
+function stopAuto(){auto=null;$('bAuto').classList.remove('on');$('bAuto').textContent='Viaje automático'}
+$('bSmall').onclick=()=>jump(-1);$('bBig').onclick=()=>jump(1);
+$('bAuto').onclick=()=>{if(auto){stopAuto();return}auto={phase:z>L[0].z+.5?'in':'out'};$('bAuto').classList.add('on');$('bAuto').textContent='Detener'};
+$('bMenu').onclick=()=>{location.href='../juegos/'};
+
+/* ---------- dibujo principal ---------- */
+const stars=(()=>{const r=rng(1);return Array.from({length:140},()=>[r(),r(),r()])})();
+function render(t){
+  ctx.clearRect(0,0,VW,VH);
+  const top=110,bot=$('panel').getBoundingClientRect().top,wide=VW>=700,cx=wide?(VW-440)/2:VW/2,cy=wide?VH/2:(top+bot)/2,base=Math.min(wide?VW-460:VW-60,(wide?VH:bot-top)-20);
+  for(const [x,y,s] of stars){ctx.fillStyle=`rgba(216,251,255,${.15+s*.3})`;const px=((x*VW+(z*37*s))%VW+VW)%VW;ctx.fillRect(px,y*VH,1.2,1.2)}
+  let i=0;while(i<L.length-2&&z>L[i+1].z)i++;
+  const a=L[i],b=L[i+1],f=Math.max(0,Math.min(1,(z-a.z)/(b.z-a.z))),sm=f*f*(3-2*f);
+  const draws=[[i,1-sm],[i+1,sm]];if(z<L[0].z)draws.splice(1,1);if(z>L[L.length-1].z)draws.splice(0,1);
+  for(const [j,al] of draws){if(al<.02)continue;const s=Math.pow(10,(L[j].z-z)*.75),u=base*s;if(u>base*60||u<2)continue;
+    ctx.save();ctx.translate(cx,cy);ctx.globalAlpha=al;L[j].draw(u,t/1000);ctx.restore()}
+  ctx.globalAlpha=1;
+  // regla de escala
+  const rw=base*.3,rx=cx-rw/2,ry=Math.min(bot-18,cy+base*.5+4);ctx.strokeStyle=Y;ctx.lineWidth=2;ctx.beginPath();ctx.moveTo(rx,ry-5);ctx.lineTo(rx,ry);ctx.lineTo(rx+rw,ry);ctx.lineTo(rx+rw,ry-5);ctx.stroke();
+  const fw=Math.pow(10,z)*(rw/base);label(fmtLen(fw),cx,ry-12,13,Y);
+  // textos
+  const e=Math.round(z);$('sExp').textContent='Ancho de la vista ≈ '+expTxt(e);$('sLen').textContent=fmtLen(Math.pow(10,z));
+  const n=nearest();if(n!==lastLevel){lastLevel=n;$('iName').textContent=L[n].name;$('iSize').textContent='Ancho de esta vista: unos '+fmtLen(Math.pow(10,L[n].z));$('iFact').textContent=L[n].fact}
+  $('info').style.opacity=Math.abs(L[n].z-z)<.8?1:.55;
+  drawTrack()}
+function zToY(v,h){return 10+(1-(v-ZMIN)/(ZMAX-ZMIN))*(h-20)}
+function drawTrack(){const r=trc.getBoundingClientRect(),w=r.width,h=r.height;tctx.clearRect(0,0,w,h);
+  tctx.strokeStyle='rgba(55,232,255,.4)';tctx.lineWidth=2;tctx.beginPath();tctx.moveTo(w/2,10);tctx.lineTo(w/2,h-10);tctx.stroke();
+  L.forEach((l,i)=>{const y=zToY(l.z,h);tctx.fillStyle=i===lastLevel?'#ffd23f':'rgba(55,232,255,.8)';tctx.beginPath();tctx.arc(w/2,y,i===lastLevel?5:3,0,7);tctx.fill()});
+  const y=zToY(z,h);tctx.strokeStyle='#fff';tctx.lineWidth=2;tctx.beginPath();tctx.moveTo(4,y);tctx.lineTo(w-4,y);tctx.stroke();
+  tctx.font='700 10px Rajdhani,system-ui';tctx.fillStyle='rgba(216,251,255,.6)';tctx.textAlign='center';tctx.fillText('grande',w/2,8);tctx.fillText('pequeño',w/2,h-1)}
+trc.addEventListener('pointerdown',e=>{e.stopPropagation();const r=trc.getBoundingClientRect(),v=1-(e.clientY-r.top-10)/(r.height-20);stopAuto();
+  const tz=ZMIN+v*(ZMAX-ZMIN);let b=0;for(let i=1;i<L.length;i++)if(Math.abs(L[i].z-tz)<Math.abs(L[b].z-tz))b=i;zt=L[b].z});
+
+/* ---------- control táctil ---------- */
+const ptrs=new Map();let pinch0=null;
+cv.addEventListener('pointerdown',e=>{ptrs.set(e.pointerId,{x:e.clientX,y:e.clientY});stopAuto();pinch0=null});
+cv.addEventListener('pointermove',e=>{const p=ptrs.get(e.pointerId);if(!p)return;const np={x:e.clientX,y:e.clientY};
+  if(ptrs.size===1){zt=clampZ(zt-(np.y-p.y)/VH*6)}
+  else if(ptrs.size===2){ptrs.set(e.pointerId,np);const [a,b]=[...ptrs.values()],d=Math.hypot(a.x-b.x,a.y-b.y);if(pinch0)zt=clampZ(zt-Math.log10(d/pinch0)*3);pinch0=d;return}
+  ptrs.set(e.pointerId,np)});
+const up=e=>{ptrs.delete(e.pointerId);pinch0=null};cv.addEventListener('pointerup',up);cv.addEventListener('pointercancel',up);
+addEventListener('wheel',e=>{stopAuto();zt=clampZ(zt+e.deltaY*.003)},{passive:true});
+
+/* ---------- manos ---------- */
+const video=$('video');let lm=null,ready=false,hands=[],lastVT=-1;
+let pinchCfg={on:.33,off:.52};try{const v=JSON.parse(localStorage.getItem('holo-rubik-pinch')||'null');if(v)pinchCfg=v}catch(e){}
+const pinchState={},prevPinch={};let open0=null;
+function toScreen(p){const k=Math.max(VW/(video.videoWidth||640),VH/(video.videoHeight||480)),vw=video.videoWidth||640,vh=video.videoHeight||480;return{x:VW-(p.x*vw*k-(vw*k-VW)/2),y:p.y*vh*k-(vh*k-VH)/2}}
+const dist=(a,b)=>Math.hypot(a.x-b.x,a.y-b.y);
+function poseOf(s,hs,pinch){if(pinch)return'pinch';const ext=j=>dist(s[j],s[0])>dist(s[j-2],s[0])*1.12,i=ext(8),m=ext(12),r=ext(16),p=ext(20);
+  if(i&&m&&r&&p)return'open';if(i&&!m&&!r&&!p)return'point';return'other'}
+function readHands(res){const seen=new Set();
+  hands=res.landmarks.map((l,i)=>{const k='h'+(res.handedness?.[i]?.[0]?.categoryName||i);seen.add(k);const s=l.map(toScreen),hs=dist(s[0],s[9])||1,ratio=dist(s[4],s[8])/hs;
+    const pinch=pinchState[k]?ratio<pinchCfg.off:ratio<pinchCfg.on;pinchState[k]=pinch;return{k,s,tip:s[8],pinch,pp:{x:(s[4].x+s[8].x)/2,y:(s[4].y+s[8].y)/2},pose:poseOf(s,hs,pinch)}});
+  for(const k of Object.keys(pinchState))if(!seen.has(k)){delete pinchState[k];delete prevPinch[k]}
+  // pellizco y mover: arriba = alejarse, abajo = acercarse
+  for(const h of hands){if(h.pinch){const pv=prevPinch[h.k];if(pv){stopAuto();zt=clampZ(zt-(h.pp.y-pv.y)/VH*7)}prevPinch[h.k]={...h.pp}}else delete prevPinch[h.k]}
+  // dos manos abiertas: separar = acercarse
+  const op=hands.filter(h=>h.pose==='open');
+  if(op.length===2){const d=dist(op[0].s[9],op[1].s[9]);if(open0){stopAuto();zt=clampZ(zt-Math.log10(d/open0)*4.5)}open0=d}else open0=null}
+let dwEl=null,dwT=0,dwPrev=null;
+function dwell(dt){let el=null;const h=hands.find(q=>q.pose==='point');
+  if(h){const mv=dwPrev?dist(h.tip,dwPrev):0;dwPrev={...h.tip};const e=document.elementFromPoint(h.tip.x,h.tip.y);el=e&&e.closest('button');if(mv>10)dwT=Math.min(dwT,0)}else dwPrev=null;
+  if(el!==dwEl){if(dwEl)dwEl.style.setProperty('--p',0);dwEl=el;dwT=0}
+  if(el){dwT+=dt;el.style.setProperty('--p',Math.max(0,Math.min(1,dwT/.9)));if(dwT>=.9){el.click();dwT=-.8}}}
+function drawHands(){octx.clearRect(0,0,VW,VH);
+  for(const h of hands){const s=h.s;octx.strokeStyle='rgba(55,232,255,.3)';octx.lineWidth=1.5;octx.beginPath();for(const {start,end} of HandLandmarker.HAND_CONNECTIONS){octx.moveTo(s[start].x,s[start].y);octx.lineTo(s[end].x,s[end].y)}octx.stroke();
+    const p=h.pinch?h.pp:h.tip;octx.shadowColor='#37e8ff';octx.shadowBlur=14;octx.fillStyle=h.pinch?'#fff':'#37e8ff';octx.beginPath();octx.arc(p.x,p.y,h.pinch?10:7,0,7);octx.fill();octx.shadowBlur=0;
+    const lbl={pinch:'arriba: alejar · abajo: acercar',open:hands.filter(q=>q.pose==='open').length>1?'separa o junta':null,point:'apuntar'}[h.pose];
+    if(lbl){octx.font='700 14px Rajdhani,system-ui';octx.textAlign='center';octx.fillStyle='#37e8ff';octx.fillText(lbl,s[0].x,s[0].y+22)}}}
+
+/* ---------- bucle ---------- */
+let last=performance.now();
+function frame(t){requestAnimationFrame(frame);const dt=Math.min(.05,(t-last)/1000);last=t;
+  if(ready&&lm&&video.readyState>=2&&video.currentTime!==lastVT){lastVT=video.currentTime;try{readHands(lm.detectForVideo(video,t))}catch(e){console.log(e)}}
+  dwell(dt);
+  if(auto){const n=L[nearest()],near=Math.abs(n.z-z),sp=.25+Math.min(1,near)*1.1;
+    if(auto.phase==='in'){zt=z-sp*dt;if(zt<=L[0].z){zt=L[0].z;auto.phase='out'}}else{zt=z+sp*dt;if(zt>=L[L.length-1].z){zt=L[L.length-1].z;stopAuto()}}}
+  z+= (zt-z)*Math.min(1,dt*(auto?20:5));
+  render(t);drawHands()}
+size();requestAnimationFrame(frame);
+
+/* ---------- cámara ---------- */
+function fail(m){$('err').textContent=m;$('err').classList.remove('hide');$('start').disabled=false;$('start').textContent='Reintentar'}
+$('start').onclick=async()=>{$('start').disabled=true;$('start').textContent='Cargando…';$('err').classList.add('hide');
+  if(!navigator.mediaDevices?.getUserMedia){fail('Este navegador no deja usar la cámara aquí. Abre la página desde https:// en Chrome o Safari.');return}
+  try{const st=await navigator.mediaDevices.getUserMedia({video:{facingMode:'user',width:{ideal:640},height:{ideal:480}},audio:false});video.srcObject=st;await video.play()}catch(e){fail('No pude abrir la cámara ('+e.name+'). Revisa el permiso.');return}
+  try{const fs=await FilesetResolver.forVisionTasks(WASM);const o=d=>({baseOptions:{modelAssetPath:MODEL,delegate:d},runningMode:'VIDEO',numHands:2});
+    try{lm=await HandLandmarker.createFromOptions(fs,o('GPU'))}catch(e){lm=await HandLandmarker.createFromOptions(fs,o('CPU'))}}catch(e){fail('No pude cargar el modelo de manos. Revisa tu conexión.');return}
+  ready=true;$('intro').classList.add('hide');size()};
+$('touch').onclick=()=>{video.classList.add('hide');$('intro').classList.add('hide');size()};
+}
+</script>
+</body>
+</html>
