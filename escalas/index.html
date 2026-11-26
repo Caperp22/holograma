@@ -56,6 +56,7 @@ button.on{background:rgba(55,232,255,.25)}
 <div id="track"><canvas id="tr"></canvas></div>
 <div id="panel">
   <div id="info"><div id="iName"></div><div id="iSize"></div><div id="iFact"></div></div>
+  <button id="bEnter" class="hide" style="border-color:#ffd23f;color:#ffd23f">Entrar con imágenes reales ▶</button>
   <div class="row">
     <button id="bSmall">◀ Más pequeño</button>
     <button id="bBig">Más grande ▶</button>
@@ -238,7 +239,7 @@ function render(t){
   const fw=Math.pow(10,z)*(rw/base);label(fmtLen(fw),cx,ry-12,13,Y);
   // textos
   const e=Math.round(z);$('sExp').textContent='Ancho de la vista ≈ '+expTxt(e);$('sLen').textContent=fmtLen(Math.pow(10,z));
-  const n=nearest();if(n!==lastLevel){lastLevel=n;$('iName').textContent=L[n].name;$('iSize').textContent='Ancho de esta vista: unos '+fmtLen(Math.pow(10,L[n].z));$('iFact').textContent=L[n].fact}
+  const n=nearest();if(n!==lastLevel){lastLevel=n;$('iName').textContent=L[n].name;$('iSize').textContent='Ancho de esta vista: unos '+fmtLen(Math.pow(10,L[n].z));$('iFact').textContent=L[n].fact;const go={'Ciudad':'colombia','Colombia':'colombia','La Tierra':'tierra','La Tierra y la Luna':'luna','Sistema solar':'sistema'}[L[n].name];$('bEnter').classList.toggle('hide',!go);$('bEnter').onclick=()=>{location.href='../explorar/#'+go}}
   $('info').style.opacity=Math.abs(L[n].z-z)<.8?1:.55;
   drawTrack()}
 function zToY(v,h){return 10+(1-(v-ZMIN)/(ZMAX-ZMIN))*(h-20)}

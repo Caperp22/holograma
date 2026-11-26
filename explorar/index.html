@@ -1,0 +1,297 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<title>Explorar el espacio</title>
+<link href="https://fonts.googleapis.com/css2?family=Rajdhani:wght@500;700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css">
+<style>
+:root{--c:#37e8ff;--bg:#010306;--ink:#d8fbff;--y:#ffd23f}
+*{box-sizing:border-box;min-width:0}
+html,body{margin:0;height:100%;background:var(--bg);color:var(--ink);font:16px/1.35 Rajdhani,system-ui,sans-serif;overflow:hidden;touch-action:none;user-select:none;-webkit-user-select:none}
+video{position:fixed;inset:0;width:100%;height:100%;object-fit:cover;opacity:.14;filter:saturate(.3);transform:scaleX(-1);z-index:1;pointer-events:none}
+#gl{position:fixed;inset:0;width:100%;height:100%;z-index:0}
+#map{position:fixed;inset:0;z-index:0;background:#000}
+#ov{position:fixed;inset:0;width:100%;height:100%;pointer-events:none;z-index:6}
+button{--p:0;font:inherit;font-weight:700;color:var(--c);border:1px solid var(--c);border-radius:10px;min-height:44px;padding:0 12px;cursor:pointer;white-space:nowrap;
+  background:linear-gradient(90deg,rgba(55,232,255,.32) calc(var(--p)*100%),rgba(2,20,28,.85) 0)}
+button:focus-visible{outline:2px solid #fff;outline-offset:2px}
+button.on{background:rgba(55,232,255,.28)}
+#top{position:fixed;left:0;right:0;top:0;z-index:4;display:flex;gap:6px;align-items:center;padding:max(10px,env(safe-area-inset-top)) 10px 0}
+#title{flex:1;text-align:center;font-weight:700;font-size:18px;text-shadow:0 0 10px var(--c);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+#panel{position:fixed;left:0;right:0;bottom:0;z-index:4;padding:10px 10px max(10px,env(safe-area-inset-bottom));background:linear-gradient(to top,rgba(1,3,6,.95) 72%,rgba(1,3,6,0));display:flex;flex-direction:column;gap:8px;max-width:760px;margin:0 auto}
+#info{border:1px solid rgba(55,232,255,.35);border-radius:12px;padding:10px 12px;background:rgba(2,20,28,.72)}
+#iName{font-size:24px;font-weight:700;color:#fff;text-shadow:0 0 10px var(--c);line-height:1.1}
+#iFacts{margin:4px 0 0;padding:0;list-style:none;font-size:15px;color:rgba(216,251,255,.9)}
+#iFacts li{margin:2px 0}#iFacts b{color:var(--y)}
+.chips{display:flex;gap:6px;overflow-x:auto;scroll-snap-type:x mandatory;padding-bottom:2px}
+.chips button{flex:none;scroll-snap-align:start;min-height:42px}
+#search{display:flex;gap:6px}#search input{flex:1;font:inherit;font-size:16px;color:#fff;background:rgba(2,20,28,.85);border:1px solid var(--c);border-radius:10px;padding:0 10px;min-height:44px}
+#hint{position:fixed;left:50%;top:62px;transform:translateX(-50%);z-index:4;font-size:14px;color:rgba(216,251,255,.75);text-align:center;pointer-events:none;width:92vw}
+#toast{position:fixed;left:50%;top:92px;transform:translateX(-50%);z-index:7;background:rgba(2,20,28,.92);border:1px solid var(--c);border-radius:10px;padding:8px 14px;font-weight:700;opacity:0;transition:opacity .3s;pointer-events:none;max-width:90vw;text-align:center}
+#credit{position:fixed;left:8px;bottom:2px;z-index:3;font-size:10px;color:rgba(216,251,255,.45);pointer-events:none}
+.leaflet-control-attribution{font-size:10px!important;background:rgba(0,0,0,.55)!important;color:#ccc!important}.leaflet-control-attribution a{color:#9fe!important}
+.sheet{position:fixed;inset:0;z-index:8;display:grid;place-items:center;padding:20px;background:radial-gradient(circle at 50% 30%,rgba(6,48,58,.96),rgba(1,3,6,.98) 70%);overflow:auto}
+.sheet .box{width:100%;max-width:460px}
+.sheet h1{font-size:40px;line-height:1.05;margin:0 0 8px;color:var(--c);text-shadow:0 0 16px var(--c)}
+.sheet li,.sheet p{color:rgba(216,251,255,.88)}.sheet ul{padding-left:20px}
+.sheet button{width:100%;margin-top:8px;min-height:50px;font-size:18px}
+#err{color:#ff9a9a}
+.hide{display:none!important}
+@media (min-width:700px){#panel{left:auto;right:12px;bottom:12px;width:420px;background:none}}
+</style>
+</head>
+<body>
+<canvas id="gl"></canvas>
+<div id="map" class="hide"></div>
+<video id="video" playsinline muted></video>
+<canvas id="ov"></canvas>
+<div id="top">
+  <button id="bHome">⌂ Inicio</button>
+  <button id="bBack">◀ Atrás</button>
+  <div id="title">Sistema solar</div>
+</div>
+<div id="hint"></div>
+<div id="toast"></div>
+<div id="panel">
+  <div id="info"><div id="iName"></div><ul id="iFacts"></ul></div>
+  <div id="actions" class="chips"></div>
+  <div id="search" class="hide"><input id="q" placeholder="Busca una ciudad o un barrio" enterkeyhint="search"><button id="bFind">Buscar</button></div>
+</div>
+<div id="credit">Texturas: Solar System Scope (CC BY 4.0), basadas en datos de la NASA</div>
+
+<div id="intro" class="sheet"><div class="box">
+  <h1>Explorar el espacio</h1>
+  <p>Planetas con imágenes reales. Entra a uno, gíralo, acércate y, en la Tierra, baja hasta tu ciudad y tu barrio.</p>
+  <ul>
+    <li>☝️ <b>Apunta</b> y deja el dedo quieto sobre un planeta o un botón para elegirlo.</li>
+    <li>✊ <b>Puño</b> y moverlo: girar el planeta o mover el mapa. Abre la mano para soltar.</li>
+    <li>🙌 <b>Dos manos abiertas</b>: sepáralas para acercarte, júntalas para alejarte.</li>
+    <li>✌️ Dos dedos 1 segundo: volver atrás.</li>
+    <li>En la pantalla: toca, arrastra y pellizca con dos dedos.</li>
+  </ul>
+  <button id="start">Activar cámara</button>
+  <button id="touch">Usar el dedo en la pantalla</button>
+  <button id="introHome">⌂ Volver al inicio</button>
+  <p id="err" class="hide"></p>
+</div></div>
+
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+<script type="module">
+import * as THREE from 'https://cdn.jsdelivr.net/npm/three@0.160.0/build/three.module.js';
+import {FilesetResolver, HandLandmarker} from 'https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@0.10.14/vision_bundle.mjs';
+{
+const $=id=>document.getElementById(id);
+const LF=window.L;
+const WASM='https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@0.10.14/wasm';
+const MODEL='https://storage.googleapis.com/mediapipe-models/hand_landmarker/hand_landmarker/float16/1/hand_landmarker.task';
+
+/* ---------- datos (tamaños y distancias del dibujo NO están a escala; los datos sí) ---------- */
+const B=[
+ {id:'sol',name:'Sol',tex:'sol.jpg',r:3.2,orbit:0,period:0,spin:.02,facts:[['Diámetro','1,39 millones de km: cabrían 109 Tierras de lado a lado'],['Luz','Su luz tarda unos 8 minutos y 20 segundos en llegar a la Tierra'],['Edad','Unos 4.600 millones de años']]},
+ {id:'mercurio',name:'Mercurio',tex:'mercurio.jpg',r:.42,orbit:6.2,period:.24,spin:.05,facts:[['Diámetro','4.879 km'],['Distancia al Sol','Unos 58 millones de km'],['Dato','Su año dura solo 88 días terrestres']]},
+ {id:'venus',name:'Venus',tex:'venus.jpg',r:.95,orbit:8.8,period:.62,spin:-.03,note:'Aquí ves su superficie, que en la realidad está oculta bajo nubes muy densas.',facts:[['Diámetro','12.104 km'],['Distancia al Sol','Unos 108 millones de km'],['Dato','Es el planeta más caliente: unos 465 °C en la superficie, y gira al revés']]},
+ {id:'tierra',name:'La Tierra',tex:'tierra.jpg',r:1,orbit:12,period:1,spin:.12,facts:[['Diámetro','12.742 km'],['Distancia al Sol','Unos 150 millones de km'],['Dato','El único lugar donde sabemos que hay vida']]},
+ {id:'luna',name:'La Luna',tex:'luna.jpg',r:.3,parent:'tierra',orbit:2,period:.3,spin:0,facts:[['Diámetro','3.474 km'],['Distancia a la Tierra','Unos 384.400 km'],['Dato','Siempre nos muestra la misma cara']]},
+ {id:'marte',name:'Marte',tex:'marte.jpg',r:.6,orbit:15.5,period:1.88,spin:.12,facts:[['Diámetro','6.779 km'],['Distancia al Sol','Unos 228 millones de km'],['Dato','Tiene el Olympus Mons, un volcán unas 2,5 veces más alto que el Everest']]},
+ {id:'jupiter',name:'Júpiter',tex:'jupiter.jpg',r:2.4,orbit:21.5,period:11.9,spin:.3,facts:[['Diámetro','139.820 km'],['Distancia al Sol','Unos 778 millones de km'],['Dato','Su Gran Mancha Roja es una tormenta más ancha que la Tierra']]},
+ {id:'saturno',name:'Saturno',tex:'saturno.jpg',r:2,orbit:28,period:29.5,spin:.28,ring:true,facts:[['Diámetro','116.460 km'],['Distancia al Sol','Unos 1.430 millones de km'],['Dato','Sus anillos son de hielo y roca, y el planeta es menos denso que el agua']]},
+ {id:'urano',name:'Urano',tex:'urano.jpg',r:1.3,orbit:33.5,period:84,spin:.2,tilt:1.71,facts:[['Diámetro','50.724 km'],['Distancia al Sol','Unos 2.870 millones de km'],['Dato','Gira acostado: su eje está inclinado unos 98°']]},
+ {id:'neptuno',name:'Neptuno',tex:'neptuno.jpg',r:1.25,orbit:38,period:165,spin:.2,facts:[['Diámetro','49.244 km'],['Distancia al Sol','Unos 4.500 millones de km'],['Dato','Tiene los vientos más rápidos del sistema solar: más de 2.000 km/h']]},
+];
+const byId=Object.fromEntries(B.map(b=>[b.id,b]));
+const PLACES=[['Colombia',4.6,-74.1,5.3],['Bogotá',4.65,-74.08,11],['Medellín',6.244,-75.581,12],['Cali',3.452,-76.532,12],['Barranquilla',10.97,-74.8,12],['Cartagena',10.42,-75.54,13]];
+
+/* ---------- escena ---------- */
+const renderer=new THREE.WebGLRenderer({canvas:$('gl'),antialias:true});
+renderer.setPixelRatio(Math.min(devicePixelRatio,2));
+const scene=new THREE.Scene(),cam=new THREE.PerspectiveCamera(45,1,.01,2000);
+const loader=new THREE.TextureLoader();
+const tex=f=>{const t=loader.load('tex/'+f);t.colorSpace=THREE.SRGBColorSpace;t.anisotropy=4;return t};
+{const sky=new THREE.Mesh(new THREE.SphereGeometry(900,48,24),new THREE.MeshBasicMaterial({map:tex('estrellas.jpg'),side:THREE.BackSide,color:0x8899aa}));scene.add(sky)}
+scene.add(new THREE.AmbientLight(0xffffff,.12));
+const sunLight=new THREE.PointLight(0xffffff,3.2,0,0);scene.add(sunLight);
+const sunGlow=(()=>{const c=document.createElement('canvas');c.width=c.height=256;const x=c.getContext('2d'),g=x.createRadialGradient(128,128,0,128,128,128);g.addColorStop(0,'rgba(255,230,150,.9)');g.addColorStop(.25,'rgba(255,180,60,.45)');g.addColorStop(1,'rgba(255,140,0,0)');x.fillStyle=g;x.fillRect(0,0,256,256);const t=new THREE.CanvasTexture(c);t.colorSpace=THREE.SRGBColorSpace;return t})();
+const Y=new THREE.Vector3(0,1,0);
+for(const b of B){
+  b.pivot=new THREE.Object3D();(b.parent?byId[b.parent].pivotPos:scene).add(b.pivot);
+  b.pivotPos=new THREE.Object3D();b.pivot.add(b.pivotPos);b.pivotPos.position.x=b.orbit;b.angle=Math.random()*6.28;
+  const mat=b.id==='sol'?new THREE.MeshBasicMaterial({map:tex(b.tex)}):new THREE.MeshStandardMaterial({map:tex(b.tex),roughness:1,metalness:0});
+  b.mesh=new THREE.Mesh(new THREE.SphereGeometry(b.r,64,32),mat);b.mesh.userData.body=b;
+  b.tiltG=new THREE.Object3D();b.tiltG.rotation.z=b.tilt||(b.id==='sol'?0:.41);b.pivotPos.add(b.tiltG);b.tiltG.add(b.mesh);
+  if(b.id==='sol'){const s=new THREE.Sprite(new THREE.SpriteMaterial({map:sunGlow,blending:THREE.AdditiveBlending,depthWrite:false}));s.scale.setScalar(b.r*5);b.pivotPos.add(s)}
+  if(b.id==='tierra'){const cl=new THREE.Mesh(new THREE.SphereGeometry(b.r*1.012,64,32),new THREE.MeshStandardMaterial({map:loader.load('tex/nubes.webp'),transparent:true,depthWrite:false,opacity:.9}));b.mesh.add(cl);b.clouds=cl;
+    const at=new THREE.Mesh(new THREE.SphereGeometry(b.r*1.06,48,24),new THREE.MeshBasicMaterial({color:0x4aa8ff,transparent:true,opacity:.12,side:THREE.BackSide,blending:THREE.AdditiveBlending}));b.tiltG.add(at)}
+  if(b.ring){const t=loader.load('tex/anillos.webp');t.colorSpace=THREE.SRGBColorSpace;const rg=new THREE.Mesh(new THREE.PlaneGeometry(b.r*4.68,b.r*4.68),new THREE.MeshStandardMaterial({map:t,transparent:true,side:THREE.DoubleSide,depthWrite:false,roughness:1}));rg.rotation.x=-Math.PI/2;b.tiltG.add(rg);b.tiltG.rotation.z=.47}
+  if(b.orbit&&!b.parent){const pts=[];for(let i=0;i<=128;i++){const a=i/128*Math.PI*2;pts.push(new THREE.Vector3(Math.cos(a)*b.orbit,0,Math.sin(a)*b.orbit))}
+    scene.add(new THREE.Line(new THREE.BufferGeometry().setFromPoints(pts),new THREE.LineBasicMaterial({color:0x37e8ff,transparent:true,opacity:.18})))}
+}
+const pickables=B.map(b=>b.mesh);
+
+/* ---------- vistas ---------- */
+let mode='system',focus=null,sys={yaw:.6,pitch:.55,dist:62},foc={dist:3},freeze=false;
+const camTarget=new THREE.Vector3(),camPos=new THREE.Vector3(48,30,40);
+function size(){const W=innerWidth,H=innerHeight;renderer.setSize(W,H,false);cam.aspect=W/H;
+  const panH=W>=700?0:$('panel').getBoundingClientRect().height;cam.setViewOffset(W,H,0,panH*.42,W,H);cam.updateProjectionMatrix();
+  const o=$('ov'),r=Math.min(devicePixelRatio,2);o.width=W*r;o.height=H*r;octx.setTransform(r,0,0,r,0,0);if(map)map.invalidateSize()}
+const octx=$('ov').getContext('2d');
+addEventListener('resize',size);new ResizeObserver(size).observe($('panel'));
+function worldPos(b){return b.mesh.getWorldPosition(new THREE.Vector3())}
+function fitDist(rr){const tV=Math.tan(22.5*Math.PI/180),tH=tV*cam.aspect;return Math.max(rr/(.8*tH),rr/(.55*tV))}
+function enter(b){focus=b;mode='focus';freeze=true;foc.dist=fitDist(b.ring?b.r*2.34:b.r);foc.min=b.r*1.12;foc.max=foc.dist*3;spinUser=null;showOnly(b);setUI();location.hash=b.id}
+function showOnly(b){const pair={tierra:'luna',luna:'tierra'};for(const o of B)o.tiltG.visible=!b||o===b||o.id==='sol'||pair[b.id]===o.id}
+function toSystem(){focus=null;mode='system';freeze=false;showOnly(null);setUI();history.replaceState(null,'',location.pathname)}
+function viewDir(){if(!focus)return new THREE.Vector3(0,0,1);const p=worldPos(focus),s=focus.id==='sol'?new THREE.Vector3(1,.3,1):p.clone().negate();s.y=0;s.normalize();
+  const side=new THREE.Vector3().crossVectors(Y,s).normalize();return s.multiplyScalar(.82).add(side.multiplyScalar(.45)).add(new THREE.Vector3(0,.32,0)).normalize()}
+function updateCamera(){
+  if(mode==='system'){camTarget.lerp(new THREE.Vector3(),.08);const d=sys.dist/Math.min(1,cam.aspect*1.4);const want=new THREE.Vector3(Math.cos(sys.pitch)*Math.sin(sys.yaw)*d,Math.sin(sys.pitch)*d,Math.cos(sys.pitch)*Math.cos(sys.yaw)*d);camPos.lerp(want,.08)}
+  else if(focus){const p=worldPos(focus);camTarget.lerp(p,.12);camPos.lerp(p.clone().add(viewDir().multiplyScalar(foc.dist)),.12)}
+  cam.position.copy(camPos);cam.lookAt(camTarget);sunLight.position.set(0,0,0)}
+
+/* ---------- interfaz ---------- */
+let toastT=0;function toast(t){$('toast').textContent=t;$('toast').style.opacity=1;clearTimeout(toastT);toastT=setTimeout(()=>$('toast').style.opacity=0,1800)}
+function chips(list){$('actions').innerHTML='';for(const [label,fn] of list){const b=document.createElement('button');b.textContent=label;b.onclick=fn;$('actions').appendChild(b)}}
+function setUI(){
+  $('search').classList.add('hide');
+  if(mode==='system'){$('title').textContent='Sistema solar';$('hint').textContent='Toca un planeta (o apúntalo con el dedo quieto) para entrar · tamaños y distancias no están a escala';
+    $('iName').textContent='Sistema solar';$('iFacts').innerHTML='<li>El Sol y sus 8 planetas. <b>Elige uno</b> para entrar.</li>';
+    chips(B.filter(b=>!b.parent).map(b=>[b.name,()=>enter(b)]).concat([['Luna',()=>enter(byId.luna)]]))}
+  else if(mode==='focus'){const b=focus;$('title').textContent=b.name;$('hint').textContent=b.id==='tierra'?'Acércate mucho para pasar a la imagen satelital':'Gira con el puño o arrastrando · acércate o aléjate';
+    $('iName').textContent=b.name;$('iFacts').innerHTML=b.facts.map(([k,v])=>`<li><b>${k}:</b> ${v}</li>`).join('')+(b.note?`<li>${b.note}</li>`:'');
+    const list=[['◀ Sistema solar',toSystem]];
+    if(b.id==='tierra'){list.push(['Ir a la Luna',()=>enter(byId.luna)]);for(const [n,la,lo,z] of PLACES)list.push([n,()=>openMap(la,lo,z)]);list.push(['Buscar lugar',()=>openMap(4.6,-74.1,5,true)])}
+    if(b.id==='luna')list.push(['Volver a la Tierra',()=>enter(byId.tierra)]);
+    chips(list)}
+  else{$('title').textContent='La Tierra · satélite';$('hint').textContent='';$('iName').textContent='Imagen satelital';
+    $('iFacts').innerHTML='<li>Acércate hasta ver tu ciudad, tu barrio y tus calles. Aléjate mucho para volver al globo.</li>';
+    chips([['◀ Volver al globo',closeMap],...PLACES.map(([n,la,lo,z])=>[n,()=>map.flyTo([la,lo],z,{duration:1.6})])]);$('search').classList.remove('hide')}
+  size()}
+$('bHome').onclick=()=>{location.href='../'};$('introHome').onclick=()=>{location.href='../'};
+function goBack(){if(mode==='map')closeMap();else if(mode==='focus'){if(focus.id==='luna')enter(byId.tierra);else toSystem()}else location.href='../escalas/'}
+$('bBack').onclick=goBack;
+
+/* ---------- mapa satelital (Tierra) ---------- */
+let map=null;
+function latLonOfView(){const b=byId.tierra,c=worldPos(b),dir=cam.position.clone().sub(c).normalize(),p=b.mesh.worldToLocal(c.clone().add(dir.multiplyScalar(b.r))).normalize();
+  const lat=Math.asin(p.y)*180/Math.PI;let u=Math.atan2(p.z,-p.x)/(Math.PI*2);if(u<0)u+=1;return[lat,u*360-180]}
+function faceLatLon(lat,lon){const b=byId.tierra,phi=(lon+180)/360*Math.PI*2,th=Math.PI/2-lat*Math.PI/180;
+  const p=new THREE.Vector3(-Math.cos(phi)*Math.sin(th),Math.cos(th),Math.sin(phi)*Math.sin(th)).normalize(),n=Y.clone().sub(p.clone().multiplyScalar(p.dot(Y))).normalize();
+  const f=viewDir(),parentQ=b.tiltG.getWorldQuaternion(new THREE.Quaternion()),fl=f.clone().applyQuaternion(parentQ.clone().invert()),ul=Y.clone().applyQuaternion(parentQ.clone().invert());
+  const u=ul.sub(fl.clone().multiplyScalar(fl.dot(ul))).normalize();
+  const Bl=new THREE.Matrix4().makeBasis(p,n,new THREE.Vector3().crossVectors(p,n)),Bw=new THREE.Matrix4().makeBasis(fl,u,new THREE.Vector3().crossVectors(fl,u));
+  b.mesh.quaternion.setFromRotationMatrix(Bw.multiply(Bl.transpose()))}
+function openMap(lat,lon,z,search){
+  if(!LF){toast('No pude cargar el mapa. Revisa tu conexión.');return}
+  mode='map';$('map').classList.remove('hide');$('gl').classList.add('hide');
+  if(!map){map=LF.map('map',{zoomControl:false,zoomSnap:0,minZoom:2,maxZoom:19,worldCopyJump:true});
+    LF.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}',{maxZoom:19,maxNativeZoom:18,attribution:'Imágenes © Esri, Maxar, Earthstar Geographics y la comunidad de usuarios GIS'}).addTo(map);
+    LF.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/Reference/World_Boundaries_and_Places/MapServer/tile/{z}/{y}/{x}',{maxZoom:19,maxNativeZoom:18,attribution:'Nombres © Esri'}).addTo(map);
+    map.on('zoomend',()=>{if(mode==='map'&&map.getZoom()<2.6)closeMap()})}
+  map.setView([lat,lon],Math.min(z,4),{animate:false});setUI();if(z>4)setTimeout(()=>map.flyTo([lat,lon],z,{duration:2}),250);if(search)setTimeout(()=>$('q').focus(),300)}
+function closeMap(){if(!map)return;const c=map.getCenter();mode='focus';$('map').classList.add('hide');$('gl').classList.remove('hide');foc.dist=Math.min(fitDist(byId.tierra.r)*.6,byId.tierra.r*2.4);faceLatLon(c.lat,((c.lng+540)%360)-180);spinUser=performance.now();setUI()}
+async function find(){const q=$('q').value.trim();if(!q)return;toast('Buscando…');
+  try{const r=await fetch('https://nominatim.openstreetmap.org/search?format=json&limit=1&accept-language=es&q='+encodeURIComponent(q));const j=await r.json();
+    if(!j.length){toast('No encontré ese lugar');return}const bb=j[0].boundingbox.map(Number);map.flyToBounds([[bb[0],bb[2]],[bb[1],bb[3]]],{duration:2,maxZoom:17});$('q').blur()}
+  catch(e){toast('No pude buscar. Revisa tu conexión.')}}
+$('bFind').onclick=find;$('q').addEventListener('keydown',e=>{if(e.key==='Enter')find()});
+
+/* ---------- controles: zoom y giro ---------- */
+let spinUser=null;
+function zoomBy(f){if(mode==='system')sys.dist=Math.max(18,Math.min(120,sys.dist*f));
+  else if(mode==='focus'){foc.dist=Math.max(foc.min,Math.min(foc.max,foc.dist*f));if(focus.id==='tierra'&&foc.dist<=foc.min*1.02&&f<1){const [la,lo]=latLonOfView();openMap(la,lo,4.2)}}
+  else map.setZoom(map.getZoom()-Math.log2(f)*1.6,{animate:false})}
+function dragBy(dx,dy){if(mode==='system'){sys.yaw-=dx*.006;sys.pitch=Math.max(.08,Math.min(1.45,sys.pitch+dy*.006))}
+  else if(mode==='focus'){spinUser=performance.now();const q=new THREE.Quaternion().setFromAxisAngle(Y,dx*.008);focus.mesh.quaternion.premultiply(q);
+    const right=new THREE.Vector3().crossVectors(viewDir(),Y).normalize();focus.mesh.quaternion.premultiply(new THREE.Quaternion().setFromAxisAngle(right,-dy*.008))}
+  else map.panBy([-dx,-dy],{animate:false})}
+const ray=new THREE.Raycaster();
+function pickAt(x,y){ray.setFromCamera(new THREE.Vector2(x/innerWidth*2-1,-(y/innerHeight)*2+1),cam);const h=ray.intersectObjects(pickables,false)[0];return h?h.object.userData.body:null}
+// táctil (en el mapa, Leaflet maneja sus propios gestos)
+const gl=$('gl'),ptrs=new Map();let pinch0=null,moved=0;
+gl.addEventListener('pointerdown',e=>{ptrs.set(e.pointerId,{x:e.clientX,y:e.clientY});moved=0;pinch0=null});
+gl.addEventListener('pointermove',e=>{const p=ptrs.get(e.pointerId);if(!p)return;const np={x:e.clientX,y:e.clientY};
+  if(ptrs.size===1){dragBy(np.x-p.x,np.y-p.y);moved+=Math.abs(np.x-p.x)+Math.abs(np.y-p.y)}
+  else if(ptrs.size===2){ptrs.set(e.pointerId,np);const [a,b]=[...ptrs.values()],d=Math.hypot(a.x-b.x,a.y-b.y);if(pinch0)zoomBy(pinch0/d);pinch0=d;moved=99;return}
+  ptrs.set(e.pointerId,np)});
+gl.addEventListener('pointerup',e=>{if(ptrs.size===1&&moved<8&&mode==='system'){const b=pickAt(e.clientX,e.clientY);if(b)enter(b)}ptrs.delete(e.pointerId);pinch0=null});
+gl.addEventListener('pointercancel',e=>{ptrs.delete(e.pointerId);pinch0=null});
+gl.addEventListener('wheel',e=>zoomBy(Math.pow(1.0015,e.deltaY)),{passive:true});
+
+/* ---------- manos ---------- */
+const video=$('video');let lm=null,ready=false,hands=[],lastVT=-1;
+let pinchCfg={on:.33,off:.52};try{const v=JSON.parse(localStorage.getItem('holo-rubik-pinch')||'null');if(v)pinchCfg=v}catch(e){}
+const pinchState={},fingers={},poseMem={},palmPrev={},hold={};let open0=null;
+function toScreen(p){const vw=video.videoWidth||640,vh=video.videoHeight||480,W=innerWidth,H=innerHeight,k=Math.max(W/vw,H/vh);return{x:W-(p.x*vw*k-(vw*k-W)/2),y:p.y*vh*k-(vh*k-H)/2}}
+const dist=(a,b)=>Math.hypot(a.x-b.x,a.y-b.y);
+function poseOf(k,s,hs,pinch){if(pinch)return'pinch';const st=fingers[k]=fingers[k]||{};
+  const ext=j=>{const r=dist(s[j],s[0])/(dist(s[j-2],s[0])||1);if(r>1.2)st[j]=true;else if(r<1.03)st[j]=false;return!!st[j]};
+  const i=ext(8),m=ext(12),r=ext(16),p=ext(20);if(i&&m&&r&&p)return'open';if(i&&!m&&!r&&!p)return'point';if(i&&m&&!r&&!p)return'victory';if(!i&&!m&&!r&&!p)return'fist';return'other'}
+function stablePose(k,p){const m=poseMem[k]=poseMem[k]||{pose:p,cand:p,n:0};if(p===m.pose){m.cand=p;m.n=0;return p}
+  const need=p==='pinch'?2:5;if(p===m.cand){if(++m.n>=need){m.pose=p;m.n=0}}else{m.cand=p;m.n=1}return m.pose}
+function readHands(res){const seen=new Set(),now=performance.now();
+  hands=res.landmarks.map((l,i)=>{const k='h'+(res.handedness?.[i]?.[0]?.categoryName||i);seen.add(k);const s=l.map(toScreen),hs=dist(s[0],s[9])||1,ratio=dist(s[4],s[8])/hs;
+    const pinch=pinchState[k]?ratio<pinchCfg.off:ratio<pinchCfg.on;pinchState[k]=pinch;return{k,s,tip:s[8],pinch,pose:stablePose(k,poseOf(k,s,hs,pinch))}});
+  for(const k of Object.keys(pinchState))if(!seen.has(k)){delete pinchState[k];delete palmPrev[k];delete hold[k];delete poseMem[k];delete fingers[k]}
+  const op=hands.filter(h=>h.pose==='open');
+  if(op.length===2){const d=dist(op[0].s[9],op[1].s[9]);if(open0)zoomBy(open0/d);open0=d}else open0=null;
+  for(const h of hands){const c=h.s[9],pv=palmPrev[h.k];palmPrev[h.k]={x:c.x,y:c.y};
+    if(h.pose==='fist'&&pv){const dx=c.x-pv.x,dy=c.y-pv.y;if(Math.hypot(dx,dy)>1.2)dragBy(dx*1.3,dy*1.3)}
+    if(h.pose==='pinch'&&pv){const dy=c.y-pv.y;if(Math.abs(dy)>1)zoomBy(Math.pow(1.006,dy))}
+    const hd=hold[h.k]=hold[h.k]||{pose:null,t0:0,fired:false};if(hd.pose!==h.pose){hd.pose=h.pose;hd.t0=now;hd.fired=false}
+    h.holdP=h.pose==='victory'&&!hd.fired?Math.min(1,(now-hd.t0)/1200):0;if(h.pose==='victory'&&!hd.fired&&now-hd.t0>=1200){hd.fired=true;toast('Atrás');goBack()}}}
+// apuntar y dejar quieto: botones y planetas
+let dwKey=null,dwT=0,dwPrev=null,dwTarget=null;
+function dwell(dt){const h=hands.find(q=>q.pose==='point');let tgt=null,key=null;
+  if(h){const mv=dwPrev?dist(h.tip,dwPrev):0;dwPrev={...h.tip};if(mv>10)dwT=Math.min(dwT,0);
+    const e=document.elementFromPoint(h.tip.x,h.tip.y),btn=e&&e.closest('button');
+    if(btn){tgt=btn;key=btn}else if(mode==='system'&&e===gl){const b=pickAt(h.tip.x,h.tip.y);if(b){tgt=b;key=b.id}}}else dwPrev=null;
+  if(key!==dwKey){if(dwTarget&&dwTarget.style)dwTarget.style.setProperty('--p',0);dwKey=key;dwTarget=tgt;dwT=0}
+  if(tgt){dwT+=dt;const p=Math.max(0,Math.min(1,dwT/.9));if(tgt.style)tgt.style.setProperty('--p',p);
+    if(dwT>=.9){dwT=-.8;if(tgt.click)tgt.click();else enter(tgt)}}}
+function drawHands(){const W=innerWidth,H=innerHeight;octx.clearRect(0,0,W,H);
+  for(const h of hands){const s=h.s;octx.strokeStyle='rgba(55,232,255,.3)';octx.lineWidth=1.5;octx.beginPath();for(const {start,end} of HandLandmarker.HAND_CONNECTIONS){octx.moveTo(s[start].x,s[start].y);octx.lineTo(s[end].x,s[end].y)}octx.stroke();
+    octx.shadowColor='#37e8ff';octx.shadowBlur=14;octx.fillStyle='#37e8ff';octx.beginPath();octx.arc(h.tip.x,h.tip.y,7,0,7);octx.fill();octx.shadowBlur=0;
+    const lbl={point:'apuntar',fist:mode==='map'?'moviendo el mapa':'girando',open:hands.filter(q=>q.pose==='open').length>1?'zoom':'mano libre',pinch:'arriba/abajo: zoom',victory:'atrás'}[h.pose];
+    if(lbl){octx.font='700 15px Rajdhani,system-ui';octx.textAlign='center';octx.fillStyle='#37e8ff';octx.fillText(lbl,s[0].x,s[0].y+22)}
+    if(h.holdP>0){octx.strokeStyle='#ffd23f';octx.lineWidth=5;octx.beginPath();octx.arc(s[9].x,s[9].y,30,-Math.PI/2,-Math.PI/2+Math.PI*2*h.holdP);octx.stroke()}}
+  if(dwKey&&typeof dwKey==='string'&&dwTarget&&!dwTarget.style&&dwT>0){const p=worldPos(dwTarget).project(cam),x=(p.x+1)/2*W,y=(1-p.y)/2*H;
+    octx.strokeStyle='#ffd23f';octx.lineWidth=4;octx.beginPath();octx.arc(x,y,34,-Math.PI/2,-Math.PI/2+Math.PI*2*Math.min(1,dwT/.9));octx.stroke();
+    octx.font='700 16px Rajdhani,system-ui';octx.fillStyle='#ffd23f';octx.textAlign='center';octx.fillText(dwTarget.name,x,y-42)}}
+
+/* ---------- etiquetas de planetas en la vista del sistema ---------- */
+function drawLabels(){if(mode!=='system')return;octx.font='700 14px Rajdhani,system-ui';octx.textAlign='center';
+  for(const b of B){if(b.parent)continue;const p=worldPos(b).project(cam);if(p.z>1)continue;const x=(p.x+1)/2*innerWidth,y=(1-p.y)/2*innerHeight;
+    octx.fillStyle='rgba(216,251,255,.85)';octx.fillText(b.name,x,y-14-Math.min(30,b.r*6))}}
+
+/* ---------- bucle ---------- */
+let last=performance.now();
+function frame(t){requestAnimationFrame(frame);const dt=Math.min(.05,(t-last)/1000);last=t;
+  if(ready&&lm&&video.readyState>=2&&video.currentTime!==lastVT){lastVT=video.currentTime;try{readHands(lm.detectForVideo(video,t))}catch(e){console.log(e)}}
+  dwell(dt);
+  if(mode!=='map'){
+    for(const b of B){if(!freeze&&b.period){b.angle+=dt*.25/b.period;b.pivot.rotation.y=b.angle}
+      const idle=!spinUser||t-spinUser>4000;if(b.spin&&(b!==focus||idle))b.mesh.rotation.y+=dt*b.spin*(b===focus?.5:1)}
+    if(byId.tierra.clouds)byId.tierra.clouds.rotation.y+=dt*.01;
+    updateCamera();renderer.render(scene,cam)}
+  drawHands();drawLabels()}
+size();setUI();requestAnimationFrame(frame);
+
+/* ---------- inicio por enlace: #tierra, #luna, #colombia… ---------- */
+function fromHash(){const h=location.hash.slice(1);if(byId[h]){for(let i=0;i<60;i++)updateCamera();enter(byId[h])}
+  else if(h==='colombia'){enter(byId.tierra);setTimeout(()=>openMap(4.6,-74.1,5.3),600)}
+  else if(h==='sistema')toSystem()}
+
+/* ---------- cámara ---------- */
+function fail(m){$('err').textContent=m;$('err').classList.remove('hide');$('start').disabled=false;$('start').textContent='Reintentar'}
+$('start').onclick=async()=>{$('start').disabled=true;$('start').textContent='Cargando…';$('err').classList.add('hide');
+  if(!navigator.mediaDevices?.getUserMedia){fail('Este navegador no deja usar la cámara aquí. Abre la página desde https:// en Chrome o Safari.');return}
+  try{const st=await navigator.mediaDevices.getUserMedia({video:{facingMode:'user',width:{ideal:640},height:{ideal:480}},audio:false});video.srcObject=st;await video.play()}catch(e){fail('No pude abrir la cámara ('+e.name+'). Revisa el permiso.');return}
+  try{const fs=await FilesetResolver.forVisionTasks(WASM);const o=d=>({baseOptions:{modelAssetPath:MODEL,delegate:d},runningMode:'VIDEO',numHands:2});
+    try{lm=await HandLandmarker.createFromOptions(fs,o('GPU'))}catch(e){lm=await HandLandmarker.createFromOptions(fs,o('CPU'))}}catch(e){fail('No pude cargar el modelo de manos. Revisa tu conexión.');return}
+  ready=true;$('intro').classList.add('hide');fromHash()};
+$('touch').onclick=()=>{video.classList.add('hide');$('intro').classList.add('hide');fromHash()};
+}
+</script>
+</body>
+</html>

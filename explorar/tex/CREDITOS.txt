@@ -1,0 +1,9 @@
+Texturas de planetas, Luna, Sol, anillos, nubes y fondo de estrellas:
+Solar System Scope — https://www.solarsystemscope.com/textures
+Licencia: Creative Commons Attribution 4.0 (https://creativecommons.org/licenses/by/4.0/)
+Basadas en imágenes y datos de la NASA. Cambios: redimensionadas y recomprimidas; los anillos se recortaron a una sola imagen.
+Copias obtenidas del ejemplo planets-qml de Qt 3D y del repositorio homer-jay/solar-system-textures.
+
+Imágenes satelitales (vista de mapa): Esri World Imagery — © Esri y colaboradores.
+Nombres de lugares: Esri World Boundaries and Places.
+Búsqueda de lugares: OpenStreetMap Nominatim — © colaboradores de OpenStreetMap.
