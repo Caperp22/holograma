@@ -38,7 +38,7 @@ p.note{color:rgba(216,251,255,.8);margin:6px 0}
 #pSign{font-size:clamp(70px,24vw,130px);font-weight:700;line-height:1;color:#fff;text-shadow:0 0 22px var(--c)}
 #pHint{font-size:17px;color:var(--y);font-weight:700;min-height:24px;text-shadow:0 0 6px #000}
 #pMeter{width:min(70vw,320px);height:12px;border-radius:6px;background:rgba(2,20,28,.8);border:1px solid var(--c);margin:8px auto 0;overflow:hidden}#pMeter i{display:block;height:100%;width:0;background:var(--c);transition:width .1s}
-#refBox{position:absolute;right:10px;top:210px;width:118px;height:140px;border:1px solid rgba(255,210,63,.6);border-radius:12px;background:rgba(2,20,28,.75)}
+#refBox{position:absolute;right:10px;top:210px;width:150px;height:185px;border:1px solid rgba(255,210,63,.6);border-radius:12px;background:rgba(2,20,28,.75)}
 #refBox canvas{width:100%;height:100%}#refBox span{position:absolute;left:0;right:0;bottom:4px;text-align:center;font-size:12px;color:var(--y);font-weight:700}
 #pBot{position:absolute;left:0;right:0;bottom:0;padding:10px 10px max(10px,env(safe-area-inset-bottom));background:linear-gradient(to top,rgba(2,7,11,.95) 70%,rgba(2,7,11,0));display:flex;flex-direction:column;gap:8px}
 #pBot .row{display:flex;gap:6px;flex-wrap:wrap}#pBot .row>*{flex:1}
@@ -123,14 +123,14 @@ const WASM='https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@0.10.14/wasm';
 const MODEL='https://storage.googleapis.com/mediapipe-models/hand_landmarker/hand_landmarker/float16/1/hand_landmarker.task';
 
 /* ---------- contenido del curso ---------- */
-const ABC=['A','B','C','D','E','F','G','H','I','J','K','L','LL','M','N','Ñ','O','P','Q','R','RR','S','T','U','V','W','X','Y','Z'];
+const ABC=['A','B','C','D','E','F','G','H','I','J','K','L','M','N','Ñ','O','P','Q','R','S','T','U','V','W','X','Y','Z'];
 const LESSONS=[
  {id:'abc1',name:'Abecedario 1',sub:'A a la F',items:ABC.slice(0,6)},
  {id:'abc2',name:'Abecedario 2',sub:'G a la L',items:ABC.slice(6,12)},
- {id:'abc3',name:'Abecedario 3',sub:'LL a la P',items:ABC.slice(12,18)},
- {id:'abc4',name:'Abecedario 4',sub:'Q a la U',items:ABC.slice(18,24)},
- {id:'abc5',name:'Abecedario 5',sub:'V a la Z',items:ABC.slice(24)},
- {id:'num',name:'Números',sub:'Del 0 al 10',items:['0','1','2','3','4','5','6','7','8','9','10']},
+ {id:'abc3',name:'Abecedario 3',sub:'M a la Q',items:ABC.slice(12,18)},
+ {id:'abc4',name:'Abecedario 4',sub:'R a la V',items:ABC.slice(18,23)},
+ {id:'abc5',name:'Abecedario 5',sub:'W a la Z',items:ABC.slice(23)},
+ {id:'num',name:'Números',sub:'Del 1 al 10',items:['1','2','3','4','5','6','7','8','9','10']},
  {id:'sal',name:'Saludos',sub:'Para empezar una conversación',items:['Hola','Buenos días','Buenas tardes','Buenas noches','Gracias','Por favor','¿Cómo estás?','Bien','Mi nombre es','Adiós']},
  {id:'fam',name:'Familia',sub:'Las personas cercanas',items:['Mamá','Papá','Hermano','Hermana','Hijo','Hija','Abuelo','Abuela']},
  {id:'col',name:'Colores',sub:'Los básicos',items:['Rojo','Azul','Verde','Amarillo','Blanco','Negro']},
@@ -142,7 +142,7 @@ const kindOf=id=>ABC.includes(id)?'letra':/^\d+$/.test(id)?'número':'palabra';
 const LS={get(k,d){try{return JSON.parse(localStorage.getItem(k))??d}catch(e){return d}},set(k,v){try{localStorage.setItem(k,JSON.stringify(v))}catch(e){}}};
 let REF=LS.get('lsc-ref',{}),BUILTIN={},PROG=LS.get('lsc-prog',{});
 fetch('referencias.json').then(r=>r.ok?r.json():{}).then(j=>{BUILTIN=j||{};renderMap()}).catch(()=>{});
-const refOf=id=>REF[id]||BUILTIN[id]||null;
+const refOf=id=>REF[id]||BUILTIN[id]||null;const checkable=id=>!!(SPEC[id]||refOf(id));
 function saveRef(){LS.set('lsc-ref',REF);$('refCount').textContent=`Referencias grabadas: ${Object.keys({...BUILTIN,...REF}).length} de ${LESSONS.reduce((a,l)=>a+l.items.length,0)}.`}
 const done=id=>!!PROG[id];
 
@@ -155,13 +155,13 @@ let screen='intro';
 
 /* ---------- mapa y lección ---------- */
 const cur={lesson:null,list:[],i:0,mode:'lesson'};
-function renderMap(){const all=LESSONS.flatMap(l=>l.items),nref=all.filter(refOf).length;
-  $('mapNote').textContent=nref?`Hay referencia grabada para ${nref} de ${all.length} señas. Las que no tienen referencia se pueden ver en el diccionario, pero la cámara aún no puede corregirlas.`:'Todavía no hay señas de referencia grabadas. Entra a «Profesor» para grabarlas siguiendo los videos oficiales; mientras tanto puedes ver cada seña en el diccionario.';
-  $('lessons').innerHTML=LESSONS.map(l=>{const d=l.items.filter(done).length;return`<button class="lesson" data-id="${l.id}"><div><span>${l.name}</span><small>${l.sub} · ${d}/${l.items.length} practicadas · ${l.items.filter(refOf).length} con referencia</small><div class="bar"><i style="width:${d/l.items.length*100}%"></i></div></div><b>▶</b></button>`}).join('');
+function renderMap(){const all=LESSONS.flatMap(l=>l.items),nref=all.filter(checkable).length;
+  $('mapNote').textContent=`La cámara puede revisar ${nref} de ${all.length} señas: todo el abecedario y los números 1-5 y 10, según el Diccionario básico de la LSC. Las palabras se ven en el diccionario y se pueden grabar en el modo Profesor para que la cámara las revise.`;
+  $('lessons').innerHTML=LESSONS.map(l=>{const d=l.items.filter(done).length;return`<button class="lesson" data-id="${l.id}"><div><span>${l.name}</span><small>${l.sub} · ${d}/${l.items.length} practicadas · ${l.items.filter(checkable).length} con revisión</small><div class="bar"><i style="width:${d/l.items.length*100}%"></i></div></div><b>▶</b></button>`}).join('');
   $('lessons').querySelectorAll('button').forEach(b=>b.onclick=()=>openLesson(LESSONS.find(l=>l.id===b.dataset.id)));saveRef()}
 function openLesson(l){cur.lesson=l;$('lName').textContent=l.name;
   $('lNote').textContent=`${l.sub}. Toca una seña para practicarla sola, o practica toda la lección en orden. Verde: ya practicada · punteada: sin referencia todavía.`;
-  $('lItems').innerHTML=l.items.map((it,i)=>`<button data-i="${i}" class="${done(it)?'done':''} ${refOf(it)?'':'noref'}">${it}</button>`).join('');
+  $('lItems').innerHTML=l.items.map((it,i)=>`<button data-i="${i}" class="${done(it)?'done':''} ${checkable(it)?'':'noref'}">${it}</button>`).join('');
   $('lItems').querySelectorAll('button').forEach(b=>b.onclick=()=>startPractice(l.items,+b.dataset.i,'lesson'));
   $('lStart').onclick=()=>startPractice(l.items,0,'lesson');show('lesson')}
 $('rName').onclick=()=>askName();
@@ -169,9 +169,9 @@ function askName(){const box=document.createElement('div');box.className='screen
   box.innerHTML=`<div class="wrap"><h1>Deletrea tu nombre</h1><p class="note">Escribe tu nombre y lo vas deletreando letra por letra.</p><input id="nm" style="width:100%;font:inherit;font-size:22px;min-height:50px;background:rgba(2,20,28,.9);color:#fff;border:1px solid var(--c);border-radius:10px;padding:0 10px" placeholder="Tu nombre" autocomplete="off"><div style="display:flex;gap:6px;margin-top:10px"><button id="nmGo" class="g" style="flex:1">Empezar</button><button id="nmX" style="flex:1">Cancelar</button></div></div>`;
   document.body.appendChild(box);box.querySelector('#nmX').onclick=()=>box.remove();
   box.querySelector('#nmGo').onclick=()=>{const s=box.querySelector('#nm').value.toUpperCase().normalize('NFC').replace(/[^A-ZÑ]/g,'');const out=[];
-    for(let i=0;i<s.length;i++){const two=s.slice(i,i+2);if(two==='LL'||two==='RR'){out.push(two);i++}else out.push(s[i])}
+    for(let i=0;i<s.length;i++)out.push(s[i]);
     box.remove();if(!out.length){toast('Escribe un nombre con letras');return}cur.lesson={name:'Tu nombre'};startPractice(out,0,'name')}}
-$('rQuiz').onclick=()=>{const pool=LESSONS.flatMap(l=>l.items).filter(refOf);if(pool.length<2){toast('Primero hay que grabar al menos 2 señas de referencia (modo Profesor)');return}
+$('rQuiz').onclick=()=>{const pool=LESSONS.flatMap(l=>l.items).filter(checkable);if(pool.length<2){toast('Primero hay que grabar al menos 2 señas de referencia (modo Profesor)');return}
   const list=[];for(let i=0;i<10;i++)list.push(pool[Math.random()*pool.length|0]);cur.lesson={name:'Señas al azar'};startPractice(list,0,'quiz')};
 
 /* ---------- landmarks: normalización y comparación ---------- */
@@ -192,14 +192,149 @@ function dtw(A,B){const n=A.length,m=B.length,D=Array.from({length:n+1},()=>new 
   for(let i=1;i<=n;i++)for(let j=1;j<=m;j++){const a=A[i-1],b=B[j-1],c=fdist(a,b)+.35*Math.hypot(a.t[0]-b.t[0],a.t[1]-b.t[1]);D[i][j]=c+Math.min(D[i-1][j],D[i][j-1],D[i-1][j-1])}
   return D[n][m]/(n+m)}
 
+
+/* ---------- señas con revisión dedo por dedo ----------
+   Formas tomadas del alfabeto manual y los números del Diccionario básico de la LSC (Instituto Caro y Cuervo e INSOR, págs. 573-574).
+   f: estado de índice, medio, anular y meñique: e = estirado, c = cerrado/doblado, h = curvo o en gancho, '-' = no importa
+   th: pulgar: out (estirado hacia afuera), side (al costado del índice), in (sobre la palma), up (hacia arriba), '-' = no importa
+   touch: dedo cuya punta toca la punta del pulgar · sp: sep/jun (índice y medio) · dir: up/side/down (hacia dónde apunta el índice) · mov: movimiento */
+const SPEC={
+ A:{f:'cccc',th:'side',d:'Puño cerrado con el pulgar estirado, apoyado al costado del índice.'},
+ B:{f:'eeee',th:'in',sp:'jun',d:'Los cuatro dedos estirados y juntos hacia arriba; el pulgar doblado sobre la palma.'},
+ C:{f:'hhhh',th:'-',gap:true,d:'Dedos juntos y curvos formando una C con el pulgar.'},
+ D:{f:'e---',touch:'M',d:'Índice estirado hacia arriba; medio, anular y meñique doblados tocando la punta del pulgar.'},
+ E:{f:'----',bent:true,th:'under',d:'Los cuatro dedos doblados en gancho, con el pulgar doblado debajo de las puntas.'},
+ F:{f:'eccc',onIndex:true,d:'Índice estirado hacia arriba; los demás dedos cerrados y el pulgar apoyado en el índice.'},
+ G:{f:'eccc',dir:'tilt',mov:'G',d:'Índice estirado e inclinado, los demás cerrados. El índice se dobla hacia abajo.'},
+ H:{f:'eecc',sp:'jun',dir:'side',mov:'H',d:'Índice y medio estirados y juntos, de lado. La mano se mueve hacia abajo, en la dirección de la flecha.'},
+ I:{f:'ccce',th:'in',d:'Meñique estirado hacia arriba; los demás dedos cerrados con el pulgar encima.'},
+ J:{f:'ccce',mov:'J',d:'Como la I: el meñique dibuja una J (baja y se curva).'},
+ K:{f:'eecc',sp:'sep',thBetween:true,d:'Índice hacia arriba y medio estirado hacia adelante, con el pulgar entre los dos; anular y meñique cerrados.'},
+ L:{f:'eccc',th:'out',d:'Índice hacia arriba y pulgar estirado hacia el lado, formando una L.'},
+ M:{f:'cccc',tpos:[.58,1.3],d:'Mano cerrada con índice, medio y anular doblados sobre el pulgar.',approx:true},
+ N:{f:'cccc',tpos:[.3,.68],d:'Mano cerrada con índice y medio doblados sobre el pulgar.',approx:true},
+ 'Ñ':{f:'cccc',tpos:[.3,.68],mov:'Ñ',d:'Como la N, moviendo la muñeca de un lado a otro.',approx:true},
+ O:{f:'hhhh',touch:'I',round:true,d:'Las puntas de los dedos juntas con la del pulgar, formando una O.'},
+ P:{f:'e---',dir:'down',d:'Mano de lado con el índice apuntando hacia abajo; los demás dedos doblados.'},
+ Q:{f:'----',touch:'I',pinchUp:true,d:'Las puntas de todos los dedos juntas con el pulgar, apuntando hacia arriba, como un pico.'},
+ R:{f:'eecc',cross:true,d:'Índice y medio estirados y cruzados; anular y meñique cerrados.'},
+ S:{f:'eccc',mov:'S',d:'Índice estirado y los demás cerrados. El índice dibuja una S en el aire.'},
+ T:{f:'heee',touch:'I',d:'Índice doblado tocando la punta del pulgar; medio, anular y meñique estirados hacia arriba.'},
+ U:{f:'ecce',d:'Índice y meñique estirados hacia arriba; medio y anular doblados bajo el pulgar.'},
+ V:{f:'eecc',sp:'sep',d:'Índice y medio estirados y separados en V; anular y meñique cerrados.'},
+ W:{f:'eeec',sp:'sep',d:'Índice, medio y anular estirados y separados; el pulgar sujeta el meñique.'},
+ X:{f:'hccc',hook:true,d:'Índice levantado y doblado en gancho; los demás dedos cerrados.'},
+ Y:{f:'ccce',th:'out',d:'Pulgar y meñique estirados; los demás dedos doblados.'},
+ Z:{f:'eecc',sp:'jun',mov:'Z',d:'Índice y medio estirados y juntos. Dibujan una Z en el aire.'},
+ '1':{f:'eccc',d:'Índice estirado hacia arriba; los demás dedos cerrados.'},
+ '2':{f:'eecc',d:'Índice y medio estirados hacia arriba; los demás cerrados.'},
+ '3':{f:'eeec',d:'Índice, medio y anular estirados; el pulgar sujeta el meñique.'},
+ '4':{f:'eeee',th:'in',d:'Los cuatro dedos estirados; el pulgar doblado sobre la palma.'},
+ '5':{f:'eeee',th:'out',d:'La mano abierta, con los cinco dedos estirados.'},
+ '10':{f:'cccc',th:'up',mov:'10',d:'Puño con el pulgar hacia arriba, moviendo la mano de lado a lado.'},
+};
+const OFFICIAL={'6':'Mira el número 6 en la página 574 del Diccionario básico','7':'Mira el número 7 en la página 574 del Diccionario básico','8':'Mira el número 8 en la página 574 del Diccionario básico','9':'Mira el número 9 en la página 574 del Diccionario básico'};
+const FN=['índice','medio','anular','meñique'],TIPS=[8,12,16,20],MCPS=[5,9,13,17];
+// rasgos de la mano (en píxeles de la imagen, promediando los últimos cuadros para quitar temblor)
+const rawBuf=[];
+function pushRaw(res){const l=res&&res.landmarks[0];if(!l){rawBuf.length=0;return}const vw=video.videoWidth||640,vh=video.videoHeight||480;rawBuf.push(l.map(p=>({x:p.x*vw,y:p.y*vh})));if(rawBuf.length>4)rawBuf.shift()}
+function avgRaw(buf){if(!buf.length)return null;return buf[0].map((_,i)=>({x:buf.reduce((a,f)=>a+f[i].x,0)/buf.length,y:buf.reduce((a,f)=>a+f[i].y,0)/buf.length}))}
+const D2=(a,b)=>Math.hypot(a.x-b.x,a.y-b.y);
+function feats(s){if(!s)return null;const hs=D2(s[0],s[9])||1,P={x:(s[0].x+s[5].x+s[9].x+s[13].x+s[17].x)/5,y:(s[0].y+s[5].y+s[9].y+s[13].y+s[17].y)/5};
+  const st=TIPS.map((t,i)=>{const m=MCPS[i],len=D2(s[m],s[m+1])+D2(s[m+1],s[m+2])+D2(s[m+2],s[t]);return D2(s[m],s[t])/(len||1)});
+  const tp=TIPS.map(t=>D2(s[t],P)/hs);
+  const EX=[1.1,1.15,1.1,.88],CL=[.95,.95,.95,.8];const fs=st.map((v,i)=>v>.8&&tp[i]>EX[i]?'e':tp[i]<CL[i]&&v<.75?'c':'h');
+  const ax={x:s[17].x-s[5].x,y:s[17].y-s[5].y},al=ax.x*ax.x+ax.y*ax.y||1,proj=q=>((q.x-s[5].x)*ax.x+(q.y-s[5].y)*ax.y)/al;
+  const iv={x:s[8].x-s[5].x,y:s[8].y-s[5].y},il=Math.hypot(iv.x,iv.y)||1;
+  return{s,hs,P,st,tp,fs,t:proj(s[4]),crossed:proj(s[12])<proj(s[8])+.06,sep:D2(s[8],s[12])/hs,
+    tt:TIPS.map(t=>D2(s[4],s[t])/hs),thOut:D2(s[4],s[5])/hs,thPalm:Math.min(D2(s[4],s[13]),D2(s[4],s[9]))/hs,thIdx:Math.min(D2(s[4],s[6]),D2(s[4],s[7]))/hs,
+    iUp:-iv.y/il,iSide:Math.abs(iv.x)/il,thUp:(s[2].y-s[4].y)/hs}}
+// revisa una forma; devuelve qué falta en palabras sencillas
+function checkSpec(sp,F,k=1){if(!F)return{ok:false,msgs:['Pon la mano frente a la cámara'],score:0};const msgs=[];let tot=0,good=0;
+  const add=(ok,msg)=>{tot++;if(ok)good++;else msgs.push(msg)};
+  sp.f.split('').forEach((w,i)=>{if(w==='-')return;const v=F.fs[i];
+    if(w==='e')add(v==='e',`Estira el ${FN[i]}`);
+    else if(w==='c')add(v!=='e'&&F.tp[i]<[1.1,1.1,1.1,.95][i]*k,`Dobla el ${FN[i]}`);
+    else if(w==='h')add(v!=='e'&&F.tp[i]>.5/k,`Curva el ${FN[i]}, sin estirarlo del todo`)});
+  if(sp.th==='out')add(F.thOut>.85/k,'Saca el pulgar hacia el lado');
+  if(sp.th==='in')add(F.thPalm<.75*k,'Dobla el pulgar sobre la palma');
+  if(sp.th==='side')add(F.thPalm>.5&&F.thIdx<.9*k,'Pon el pulgar estirado al costado del índice');
+  if(sp.th==='under')add(F.thPalm<.85*k&&F.t<.6,'Dobla el pulgar debajo de las puntas de los dedos');
+  if(sp.th==='up')add(F.thUp>.6/k,'Levanta el pulgar');
+  if(sp.touch){const i={I:0,M:1,R:2,P:3}[sp.touch];add(F.tt[i]<.42*k,`Junta la punta del pulgar con la del ${FN[i]}`)}
+  if(sp.onIndex)add(F.thIdx<.6*k,'Apoya el pulgar sobre el índice');
+  if(sp.thBetween)add(Math.min(D2(F.s[4],F.s[10]),D2(F.s[4],F.s[6]))/F.hs<.6*k,'Pon el pulgar entre el índice y el medio');
+  if(sp.sp==='sep')add(F.sep>.42/k,'Separa más los dedos estirados');
+  if(sp.sp==='jun')add(F.sep<.4*k,'Junta el índice y el medio');
+  if(sp.cross)add(F.crossed,'Cruza el medio sobre el índice');
+  if(sp.dir==='down')add(F.iUp<-.5/k,'Apunta el índice hacia abajo');
+  if(sp.dir==='side')add(F.iSide>.6/k,'Pon los dedos de lado, horizontales');
+  if(sp.gap)add(F.tt[0]>.3&&F.tt[0]<1.2&&F.thPalm>.6&&F.tp.every(v=>v>.6/k),'Deja un espacio entre el pulgar y los dedos, como una C');
+  if(sp.round)add(F.st[0]<.8,'Redondea los dedos para formar la O');
+  if(sp.pinchUp)add(F.tt[0]<.42*k&&F.tt[1]<.5*k&&F.s[12].y<F.s[9].y-.3*F.hs,'Junta todas las puntas con el pulgar, apuntando hacia arriba');
+  if(sp.bent)add(F.fs.every(v=>v!=='e')&&F.tp.every(v=>v>.55),'Dobla los cuatro dedos en gancho, sin cerrar el puño');
+  if(sp.hook)add(F.st[0]<.82&&F.tp[0]>.85,'Levanta el índice y dóblalo en gancho');
+  if(sp.tpos)add(F.t>sp.tpos[0]&&F.t<sp.tpos[1],sp===SPEC.M?'El pulgar debe quedar bajo índice, medio y anular':'El pulgar debe quedar bajo índice y medio');
+  return{ok:!msgs.length,msgs,score:tot?good/tot:0}}
+// movimiento: se revisa sobre los cuadros capturados
+function checkMove(sp,frames){const F=frames.map(feats).filter(Boolean);if(F.length<8)return{ok:false,msg:'No vi bien tu mano. Intenta de nuevo'};
+  const shapeOK=F.filter(f=>checkSpec({...sp,mov:null,dir:null},f,1.25).ok).length/F.length;
+  const hs=F[0].hs,tip=j=>F.map(f=>f.s[j]),span=(pts,k)=>Math.max(...pts.map(p=>p[k]))-Math.min(...pts.map(p=>p[k])),len=pts=>pts.slice(1).reduce((a,p,i)=>a+D2(p,pts[i]),0);
+  const ang=F.map(f=>Math.atan2(f.s[9].y-f.s[0].y,f.s[9].x-f.s[0].x)*180/Math.PI);
+  let mv=false,msg='';
+  if(sp.mov==='G'){const a=F.slice(0,4).map(f=>f.st[0]),b=F.slice(-6).map(f=>f.st[0]);mv=Math.max(...a)-Math.min(...b)>.12||F.slice(-6).some(f=>f.fs[0]!=='e');msg='Dobla el índice hacia abajo al final'}
+  if(sp.mov==='H'){const w=tip(0);mv=D2(w[0],w[w.length-1])/hs>.45||Math.abs(F[F.length-1].hs/hs-1)>.15;msg='Mueve la mano en la dirección de la flecha'}
+  if(sp.mov==='J'){const p=tip(20);mv=(Math.max(...p.map(q=>q.y))-p[0].y)/hs>.35&&len(p)/hs>.9;msg='Dibuja la J con el meñique: baja y curva'}
+  if(sp.mov==='Ñ'||sp.mov==='10'){mv=Math.max(...ang)-Math.min(...ang)>18||span(tip(0),'x')/hs>.35;msg='Mueve la muñeca de un lado a otro'}
+  if(sp.mov==='S'){const p=tip(8);mv=len(p)/hs>2.2&&span(p,'y')/hs>.7;msg='Dibuja una S completa con el índice'}
+  if(sp.mov==='Z'){const p=tip(8);mv=span(p,'x')/hs>.8&&span(p,'y')/hs>.45&&len(p)/hs>2;msg='Dibuja una Z: derecha, diagonal y derecha'}
+  if(shapeOK<.35)return{ok:false,msg:'Revisa la forma de la mano: '+sp.d};
+  return{ok:mv,msg:mv?'':msg}}
+
+/* ---------- la manito de referencia (dibujada a partir de la forma oficial) ---------- */
+function drawSpec(ctx,sp,W,H,tt){ctx.clearRect(0,0,W,H);const u=Math.min(W/6,H/8.8);ctx.save();
+  let ox=W/2,oy=H*.74,rot=0;const ph=(tt%2200)/2200;
+  if(sp.dir==='side')rot=-1.1;if(sp.dir==='down')rot=Math.PI*.92;if(sp.dir==='tilt')rot=-.45;if(sp.f==='ccce'&&sp.mov==='J')rot=0;
+  // movimiento animado
+  const path={S:t=>[Math.sin(t*Math.PI*2)*u*1.2*(1-t)+u*.3,(t-.5)*u*3],Z:t=>t<.33?[(t/.33-.5)*u*2.4,-u*1.2]:t<.66?[(.5-(t-.33)/.33)*u*2.4,(-1.2+((t-.33)/.33)*2.4)*u]:[((t-.66)/.34-.5)*u*2.4,u*1.2],
+    J:t=>[-Math.sin(t*Math.PI)*u*1.2,t*u*1.6],H:t=>[-t*u*1.2,t*u*1.2]}[sp.mov];
+  if(path){const [dx,dy]=path(ph);ox+=dx*.6;oy+=dy*.4}
+  if(sp.mov==='Ñ'||sp.mov==='10')rot+=Math.sin(ph*Math.PI*4)*.35;
+  ctx.translate(ox,oy);ctx.rotate(rot);ctx.lineCap='round';ctx.lineJoin='round';
+  // palma
+  ctx.fillStyle='rgba(255,210,63,.18)';ctx.strokeStyle='#ffd23f';ctx.lineWidth=3;ctx.beginPath();ctx.moveTo(-1.9*u,0);ctx.lineTo(-1.8*u,-2.3*u);ctx.lineTo(1.8*u,-2.3*u);ctx.lineTo(1.9*u,0);ctx.quadraticCurveTo(0,1.4*u,-1.9*u,0);ctx.fill();ctx.stroke();
+  const bx=[1.35,.45,-.45,-1.35],L=[3,3.3,3.1,2.4];const tipXY=[];
+  sp.f.split('').forEach((w,i)=>{let state=w==='-'?(sp.touch&&i>0?'c':'c'):w;if(i===0&&sp.mov==='G'&&ph>.5)state='h';
+    const x0=bx[i]*u,y0=-2.3*u;let ang=0;if(sp.sp==='sep'&&state==='e')ang=[.18,-.02,-.2,-.3][i];if(sp.thBetween&&i===1)ang=-.35;
+    if(sp.cross&&i===1)ang=.32;
+    ctx.strokeStyle='#ffd23f';ctx.lineWidth=u*.55;ctx.beginPath();ctx.moveTo(x0,y0);let tx,ty;
+    if(state==='e'){tx=x0+Math.sin(ang)*L[i]*u;ty=y0-Math.cos(ang)*L[i]*u;ctx.lineTo(tx,ty)}
+    else if(state==='h'){const kx=x0,ky=y0-L[i]*.55*u;ctx.lineTo(kx,ky);tx=kx+(sp.hook?.2:0)*u;ty=ky+L[i]*.35*u;ctx.quadraticCurveTo(kx,ky-.5*u,tx,ty)}
+    else{ctx.lineTo(x0,y0-.55*u);tx=x0;ty=y0+.2*u;ctx.lineTo(tx,ty)}
+    ctx.stroke();ctx.strokeStyle='rgba(2,7,11,.6)';ctx.lineWidth=1.5;ctx.stroke();tipXY[i]=[tx,ty];
+    if(state!=='c'){ctx.fillStyle='#fff';ctx.beginPath();ctx.arc(tx,ty,u*.17,0,7);ctx.fill()}});
+  // pulgar
+  const tb=[1.9*u,-.3*u];let te;const th=sp.th||(sp.touch?'touch':sp.onIndex?'onIndex':sp.thBetween?'between':'in');
+  if(sp.touch){const i={I:0,M:1,R:2,P:3}[sp.touch];te=tipXY[i]?[tipXY[i][0]+u*.15,tipXY[i][1]+u*.15]:[0,-2*u]}
+  else if(th==='out')te=[3.6*u,-1.6*u];else if(th==='side'||th==='up')te=[2.1*u,-3.1*u];else if(th==='onIndex')te=[1.3*u,-3.2*u];else if(th==='between')te=[.9*u,-3.4*u];
+  else if(sp.tpos)te=[(1.35-sp.tpos[0]*2.6-.5)*u,-1.6*u];else if(th==='under')te=[.4*u,-1.6*u];else te=[-.4*u,-1.5*u];
+  ctx.strokeStyle='#ffd23f';ctx.lineWidth=u*.6;ctx.beginPath();ctx.moveTo(tb[0],tb[1]);ctx.quadraticCurveTo(tb[0]+u*.6,(tb[1]+te[1])/2,te[0],te[1]);ctx.stroke();
+  ctx.fillStyle='#fff';ctx.beginPath();ctx.arc(te[0],te[1],u*.17,0,7);ctx.fill();ctx.restore();
+  // flecha del movimiento
+  if(sp.mov){ctx.strokeStyle='rgba(55,232,255,.9)';ctx.lineWidth=3;ctx.setLineDash([6,5]);ctx.beginPath();
+    if(path){for(let i=0;i<=30;i++){const [dx,dy]=path(i/30);const x=W/2+dx*.6,y=H*.2+dy*.4;i?ctx.lineTo(x,y):ctx.moveTo(x,y)}}
+    else{ctx.arc(W/2,H*.16,u*1.2,Math.PI*1.1,Math.PI*1.9)}ctx.stroke();ctx.setLineDash([])}}
+
 /* ---------- práctica ---------- */
 const P={state:'idle',hold:0,lastFrame:null,frames:[],rec:null};
 function tol(){return +$('level').value}
 function startPractice(list,i,mode){cur.list=list;cur.i=i;cur.mode=mode;show('prac');loadItem()}
-function loadItem(){const it=cur.list[cur.i],r=refOf(it);$('pSign').textContent=it;P.state='idle';P.hold=0;$('pMeter').firstElementChild.style.width='0';
+function loadItem(){const it=cur.list[cur.i],r=refOf(it),sp=SPEC[it];$('pSign').textContent=it;P.state='idle';P.hold=0;$('pMeter').firstElementChild.style.width='0';
   $('pInfo').textContent=`${cur.lesson?cur.lesson.name+' · ':''}${cur.i+1} de ${cur.list.length} · ${kindOf(it)}`+(r?` · referencia ${r.type==='move'?'con movimiento':'quieta'}${r.n===2?', dos manos':''}`:'');
   $('pDict').href='https://educativo.insor.gov.co/diccionario/';
-  if(!r){$('pHint').textContent='Aún no hay referencia: mira la seña oficial y practícala en el espejo';$('pTry').disabled=true}
+  $('pInfo').textContent+=sp?' · '+sp.d+(sp.approx?' (revisión aproximada: el pulgar queda oculto)':''):OFFICIAL[it]?' · '+OFFICIAL[it]:'';
+  if(sp){$('pHint').textContent=sp.mov?'Seña con movimiento: toca «Intentar» y hazla después de la cuenta':'Copia la manito y mantenla quieta';$('pTry').disabled=!sp.mov}
+  else if(!r){$('pHint').textContent=OFFICIAL[it]?'Mira la seña oficial; aún no hay revisión automática para este número':'Aún no hay referencia: mira la seña oficial y practícala en el espejo';$('pTry').disabled=true}
   else if(r.type==='move'){$('pHint').textContent='Seña con movimiento: toca «Intentar» y hazla después de la cuenta';$('pTry').disabled=false}
   else{$('pHint').textContent='Haz la seña y mantenla quieta';$('pTry').disabled=true}
   $('profRow').classList.toggle('hide',!$('profOn').checked);refAnim.t0=performance.now()}
@@ -208,7 +343,12 @@ function next(ok){const it=cur.list[cur.i];if(ok){PROG[it]=Date.now();LS.set('ls
 $('pSkip').onclick=()=>next(false);$('pPrev').onclick=()=>{if(cur.i>0){cur.i--;loadItem()}};
 function success(){P.state='ok';$('pHint').innerHTML='<span class="ok">¡Bien hecho! ✓</span>';$('pMeter').firstElementChild.style.width='100%';setTimeout(()=>next(true),1100)}
 // seña quieta: se compara en vivo y se acepta al sostenerla un momento
-function evalStatic(f,dt){const it=cur.list[cur.i],r=refOf(it);if(!r||r.type!=='static'||P.state!=='idle')return;
+function evalRules(dt){const it=cur.list[cur.i],sp=SPEC[it];if(!sp||sp.mov||P.state!=='idle')return false;
+  const F=feats(avgRaw(rawBuf)),c=checkSpec(sp,F,tol());$('pMeter').firstElementChild.style.width=(c.score*100)+'%';
+  if(c.ok){P.hold+=dt;$('pHint').textContent='¡Así! Mantenla…';if(P.hold>.6)success()}
+  else{P.hold=Math.max(0,P.hold-dt*2);$('pHint').textContent=c.msgs.slice(0,2).join(' · ')}
+  return true}
+function evalStatic(f,dt){if(SPEC[cur.list[cur.i]]){evalRules(dt);return}const it=cur.list[cur.i],r=refOf(it);if(!r||r.type!=='static'||P.state!=='idle')return;
   if(!f){$('pMeter').firstElementChild.style.width='0';P.hold=0;return}
   const d=fdist(f,r.f),thr=.3*tol();let best=9;for(const id in{...BUILTIN,...REF}){if(id===it)continue;const o=refOf(id);if(o.type==='static')best=Math.min(best,fdist(f,o.f))}
   const pct=Math.max(0,Math.min(1,1-(d-.1)/.4));$('pMeter').firstElementChild.style.width=(pct*100)+'%';
@@ -217,8 +357,11 @@ function evalStatic(f,dt){const it=cur.list[cur.i],r=refOf(it);if(!r||r.type!=='
   else{P.hold=Math.max(0,P.hold-dt*2);$('pHint').textContent=f.h.length!==r.f.h.length?(r.f.h.length===2?'Esta seña es con las dos manos':'Esta seña es con una mano'):d<thr?'Se parece a otra seña: revisa la posición de los dedos':pct>.4?'Casi: ajusta los dedos como en la referencia':'Haz la seña y mantenla quieta'}}
 // cuenta regresiva y captura (para practicar señas con movimiento y para grabar referencias)
 async function countdown(){const c=$('count');c.classList.remove('hide');for(const n of['3','2','1']){c.textContent=n;await sleep(650)}c.textContent='¡Ya!';await sleep(300);c.classList.add('hide')}
-async function capture(ms){P.frames=[];P.capturing=true;await sleep(ms);P.capturing=false;return P.frames.slice()}
-$('pTry').onclick=async()=>{const it=cur.list[cur.i],r=refOf(it);if(!r||r.type!=='move'||P.state!=='idle')return;P.state='busy';$('pHint').textContent='Prepárate…';await countdown();$('pHint').textContent='¡Haz la seña!';
+async function capture(ms){P.frames=[];P.raw=[];P.capturing=true;await sleep(ms);P.capturing=false;return P.frames.slice()}
+$('pTry').onclick=async()=>{const it=cur.list[cur.i],sp=SPEC[it];
+  if(sp&&sp.mov){if(P.state!=='idle')return;P.state='busy';$('pHint').textContent='Prepárate…';await countdown();$('pHint').textContent='¡Haz la seña!';await capture(1800);
+    const c=checkMove(sp,P.raw.filter(Boolean));if(c.ok)success();else{$('pHint').textContent=c.msg;P.state='idle'}return}
+  const r=refOf(it);if(!r||r.type!=='move'||P.state!=='idle')return;P.state='busy';$('pHint').textContent='Prepárate…';await countdown();$('pHint').textContent='¡Haz la seña!';
   const fr=(await capture(r.ms||1500)).filter(Boolean);if(fr.length<8){$('pHint').textContent='No vi bien tu mano. Intenta de nuevo';P.state='idle';return}
   const d=dtw(seqOf(fr),r.seq),pct=Math.max(0,Math.min(1,1-(d-.15)/.5));$('pMeter').firstElementChild.style.width=(pct*100)+'%';
   if(d<.42*tol())success();else{$('pHint').textContent=pct>.4?'Casi: revisa el movimiento y la forma de la mano':'No coincide todavía: mira la seña oficial e intenta otra vez';P.state='idle'}};
@@ -234,7 +377,8 @@ $('rStatic').onclick=()=>record('static');$('rMove').onclick=()=>record('move');
 const refCv=$('refCv'),rctx=refCv.getContext('2d'),refAnim={t0:0};
 const CON=[[0,1],[1,2],[2,3],[3,4],[0,5],[5,6],[6,7],[7,8],[5,9],[9,10],[10,11],[11,12],[9,13],[13,14],[14,15],[15,16],[13,17],[17,18],[18,19],[19,20],[0,17]];
 const hands_n=f=>f.h.length;
-function drawRef(now){const r=refOf(cur.list[cur.i]);const W=refCv.width=refCv.clientWidth*2,H=refCv.height=refCv.clientHeight*2;rctx.clearRect(0,0,W,H);
+function drawRef(now){const sp=SPEC[cur.list[cur.i]];const r=refOf(cur.list[cur.i]);const W=refCv.width=refCv.clientWidth*2,H=refCv.height=refCv.clientHeight*2;rctx.clearRect(0,0,W,H);
+  if(screen==='prac'&&sp){$('refBox').classList.remove('hide');drawSpec(rctx,sp,W,H,now-refAnim.t0);return}
   $('refBox').classList.toggle('hide',screen!=='prac'||!r);if(!r||screen!=='prac')return;
   let f;if(r.type==='move'){const k=Math.floor(((now-refAnim.t0)%((r.ms||1500)+700))/(r.ms||1500)*r.seq.length);f=r.seq[Math.min(r.seq.length-1,k)]}else f=r.f;
   const hands=f.h,sc=Math.min(W*(hands_n(f)===2?.2:.3),H*.24);hands.forEach((h,hi)=>{const ox=W*(hands.length===2?(hi?.27:.73):.5)+(f.t?-f.t[0]*sc*.4:0),oy=H*.78+(f.t?f.t[1]*sc*.4:0);
@@ -268,7 +412,7 @@ function drawHands(res){octx.clearRect(0,0,innerWidth,innerHeight);if(!res)retur
   for(const lmk of res.landmarks){const s=lmk.map(toScreen);octx.strokeStyle='rgba(55,232,255,.85)';octx.lineWidth=3;octx.lineCap='round';octx.beginPath();for(const [a,b] of CON){octx.moveTo(s[a].x,s[a].y);octx.lineTo(s[b].x,s[b].y)}octx.stroke();
     octx.fillStyle='#fff';for(const p of s){octx.beginPath();octx.arc(p.x,p.y,3.5,0,7);octx.fill()}}}
 function frame(t){requestAnimationFrame(frame);const dt=Math.min(.05,(t-last)/1000);last=t;
-  if(ready&&lm&&video.readyState>=2&&video.currentTime!==lastVT){lastVT=video.currentTime;try{lastRes=lm.detectForVideo(video,t);const f=frameOf(lastRes);if(P.capturing)P.frames.push(f);if(screen==='prac')evalStatic(f,dt)}catch(e){console.log(e)}}
+  if(ready&&lm&&video.readyState>=2&&video.currentTime!==lastVT){lastVT=video.currentTime;try{lastRes=lm.detectForVideo(video,t);pushRaw(lastRes);const f=frameOf(lastRes);if(P.capturing){P.frames.push(f);P.raw.push(lastRes.landmarks[0]?lastRes.landmarks[0].map(p=>({x:p.x*(video.videoWidth||640),y:p.y*(video.videoHeight||480)})):null)}if(screen==='prac')evalStatic(f,dt)}catch(e){console.log(e)}}
   dwell(dt,lastRes);drawHands(screen==='prac'||screen==='lesson'?lastRes:lastRes);drawRef(t)}
 requestAnimationFrame(frame);
 function fail(m){$('err').textContent=m;$('err').classList.remove('hide');$('start').disabled=false;$('start').textContent='Reintentar'}
