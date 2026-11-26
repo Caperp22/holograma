@@ -12,7 +12,7 @@
 html,body{margin:0;height:100%;background:var(--bg);color:var(--ink);font:16px/1.35 Rajdhani,system-ui,sans-serif;overflow:hidden;touch-action:none;user-select:none;-webkit-user-select:none}
 video{position:fixed;inset:0;width:100%;height:100%;object-fit:cover;opacity:.14;filter:saturate(.3);transform:scaleX(-1);z-index:1;pointer-events:none}
 #gl{position:fixed;inset:0;width:100%;height:100%;z-index:0}
-#map{position:fixed;inset:0;z-index:0;background:#000}
+#map{position:fixed;inset:0;z-index:0;background:transparent}
 #ov{position:fixed;inset:0;width:100%;height:100%;pointer-events:none;z-index:6}
 button{--p:0;font:inherit;font-weight:700;color:var(--c);border:1px solid var(--c);border-radius:10px;min-height:44px;padding:0 12px;cursor:pointer;white-space:nowrap;
   background:linear-gradient(90deg,rgba(55,232,255,.32) calc(var(--p)*100%),rgba(2,20,28,.85) 0)}
@@ -74,7 +74,7 @@ button.on{background:rgba(55,232,255,.28)}
   <ul>
     <li>☝️ <b>Apunta</b> y deja el dedo quieto sobre un planeta o un botón para elegirlo.</li>
     <li>✊ <b>Puño</b> y moverlo: girar el planeta o mover el mapa. Abre la mano para soltar.</li>
-    <li>🙌 <b>Dos manos abiertas</b>: sepáralas para acercarte, júntalas para alejarte.</li>
+    <li>🤏 <b>Zoom como en una foto</b>: separa pulgar e índice para acercarte, júntalos para alejarte. También sirven 🙌 dos manos abiertas.</li>
     <li>✌️ Dos dedos 1 segundo: volver atrás.</li>
     <li>En la pantalla: toca, arrastra y pellizca con dos dedos.</li>
   </ul>
@@ -140,10 +140,10 @@ for(const b of B){
 const pickables=B.map(b=>b.mesh);
 
 /* ---------- vistas ---------- */
-let ringView=false,mode='system',focus=null,sys={yaw:.6,pitch:.55,dist:62},foc={dist:3},freeze=false;
+let viewOffY=0,ringView=false,mode='system',focus=null,sys={yaw:.6,pitch:.55,dist:62},foc={dist:3},freeze=false;
 const camTarget=new THREE.Vector3(),camPos=new THREE.Vector3(48,30,40);
 function size(){const W=innerWidth,H=innerHeight;renderer.setSize(W,H,false);cam.aspect=W/H;
-  const panH=W>=700?0:$('panel').getBoundingClientRect().height;cam.setViewOffset(W,H,0,panH*.42,W,H);cam.updateProjectionMatrix();
+  const panH=W>=700?0:$('panel').getBoundingClientRect().height;viewOffY=panH*.42;cam.setViewOffset(W,H,0,viewOffY,W,H);cam.updateProjectionMatrix();
   const o=$('ov'),r=Math.min(devicePixelRatio,2);o.width=W*r;o.height=H*r;octx.setTransform(r,0,0,r,0,0);if(map)map.invalidateSize()}
 const octx=$('ov').getContext('2d');
 addEventListener('resize',size);new ResizeObserver(size).observe($('panel'));
@@ -172,7 +172,7 @@ function setUI(){
     const list=[EMBED?['◀ Volver al viaje',closeEmbed]:['◀ Sistema solar',toSystem]];if(EMBED&&b.id!=='sol')list.push(['Sistema solar',toSystem]);
     if(GAL[b.id])list.push(['📷 Fotos reales de la NASA',()=>openPhotos(b.id)]);
     if(b.id==='saturno')list.push(['Ver los anillos de cerca',()=>{ringView=!ringView;foc.dist=ringView?b.r*2.7:fitDist(b.r*2.34);toast(ringView?'Vista rasante de los anillos. Para el detalle real, mira las fotos de la NASA':'Vista normal')}]);
-    if(b.id==='tierra'){list.push(['Buscar lugar',()=>openMap(4.6,-74.1,5,true)]);for(const [n,la,lo,z] of WORLD)list.push([n,()=>openMap(la,lo,z)]);list.push(['Ir a la Luna',()=>enter(byId.luna)]);for(const [n,la,lo,z] of PLACES)list.push([n,()=>openMap(la,lo,z)])}
+    if(b.id==='tierra'){list.push(['Buscar lugar',()=>openMap(null,null,null,true)]);for(const [n,la,lo,z] of WORLD)list.push([n,()=>diveTo(la,lo,z)]);list.push(['Ir a la Luna',()=>enter(byId.luna)]);for(const [n,la,lo,z] of PLACES)list.push([n,()=>diveTo(la,lo,z)])}
     if(b.id==='luna')list.push(['Volver a la Tierra',()=>enter(byId.tierra)]);
     chips(list)}
   else{$('title').textContent='La Tierra · satélite';$('hint').textContent='';$('iName').textContent='Imagen satelital';
@@ -193,15 +193,46 @@ function faceLatLon(lat,lon){const b=byId.tierra,phi=(lon+180)/360*Math.PI*2,th=
   const u=ul.sub(fl.clone().multiplyScalar(fl.dot(ul))).normalize();
   const Bl=new THREE.Matrix4().makeBasis(p,n,new THREE.Vector3().crossVectors(p,n)),Bw=new THREE.Matrix4().makeBasis(fl,u,new THREE.Vector3().crossVectors(fl,u));
   b.mesh.quaternion.setFromRotationMatrix(Bw.multiply(Bl.transpose()))}
+/* paso suave entre el globo 3D y la imagen satelital: mismo lugar, misma escala y fundido */
+const R2D=180/Math.PI,TANH=Math.tan(22.5/R2D);
+function ensureMap(){if(map)return true;if(!LF){toast('No pude cargar el mapa. Revisa tu conexión.');return false}
+  map=LF.map('map',{zoomControl:false,zoomSnap:0,minZoom:2,maxZoom:19,worldCopyJump:true,fadeAnimation:true,zoomAnimation:true});
+  satLayer=LF.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}',{maxZoom:19,maxNativeZoom:18,keepBuffer:4,attribution:'Imágenes © Esri, Maxar, Earthstar Geographics y la comunidad de usuarios GIS'}).addTo(map);
+  LF.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/Reference/World_Boundaries_and_Places/MapServer/tile/{z}/{y}/{x}',{maxZoom:19,maxNativeZoom:18,attribution:'Nombres © Esri'}).addTo(map);
+  map.on('zoomend',()=>{if(mode!=='map'||mapBusy)return;if(map.getZoom()<4.4)closeMap();else if(map.getZoom()>=map.getMaxZoom()-.05)limitMsg(true)});
+  return true}
+let mapBusy=false,satLayer=null;
+// zoom del mapa que se ve igual que el globo a esta distancia (incluye la escala de Mercator según la latitud)
+function zoomForGlobe(lat){const r=byId.tierra.r,d=cam.position.distanceTo(worldPos(byId.tierra)),ppu=(innerHeight/2)/TANH/Math.max(.01,d-r);
+  return Math.log2(2*Math.PI*r*ppu*Math.cos(lat/R2D)/256)}
+function globeDistForZoom(z,lat){const r=byId.tierra.r,ppu=256*Math.pow(2,z)/Math.cos(lat/R2D)/(2*Math.PI*r);return r+(innerHeight/2)/TANH/ppu}
+function fade(el,to,ms,done){el.style.transition='none';el.style.opacity=to?0:1;void el.offsetWidth;el.style.transition=`opacity ${ms}ms ease`;el.style.opacity=to;setTimeout(done||(()=>{}),ms+30)}
 function openMap(lat,lon,z,search){
-  if(!LF){toast('No pude cargar el mapa. Revisa tu conexión.');return}
-  mode='map';$('map').classList.remove('hide');$('gl').classList.add('hide');
-  if(!map){map=LF.map('map',{zoomControl:false,zoomSnap:0,minZoom:2,maxZoom:19,worldCopyJump:true});
-    LF.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}',{maxZoom:19,maxNativeZoom:18,attribution:'Imágenes © Esri, Maxar, Earthstar Geographics y la comunidad de usuarios GIS'}).addTo(map);
-    LF.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/Reference/World_Boundaries_and_Places/MapServer/tile/{z}/{y}/{x}',{maxZoom:19,maxNativeZoom:18,attribution:'Nombres © Esri'}).addTo(map);
-    map.on('zoomend',()=>{if(mode==='map'&&map.getZoom()<2.6)closeMap();else if(mode==='map'&&map.getZoom()>=map.getMaxZoom()-.05)limitMsg(true)})}
-  map.setView([lat,lon],Math.min(z,4),{animate:false});setUI();if(z>4)setTimeout(()=>map.flyTo([lat,lon],z,{duration:2}),250);if(search)setTimeout(()=>$('q').focus(),300)}
-function closeMap(){if(!map)return;const c=map.getCenter();mode='focus';$('map').classList.add('hide');$('gl').classList.remove('hide');foc.dist=Math.min(fitDist(byId.tierra.r)*.6,byId.tierra.r*2.4);faceLatLon(c.lat,((c.lng+540)%360)-180);spinUser=performance.now();setUI()}
+  if(!ensureMap())return;
+  const fromGlobe=mode==='focus'&&focus&&focus.id==='tierra';let zz=Math.min(z||6,5);
+  $('map').classList.remove('hide');map.invalidateSize();mapBusy=true;
+  if(fromGlobe){const [la,lo]=latLonOfView();zz=Math.max(3,Math.min(9,zoomForGlobe(la)));map.setView([la,lo],zz,{animate:false});map.panBy([0,viewOffY],{animate:false});
+    var far=lat==null||Math.abs(lat-la)>.3||Math.abs(lon-lo)>.3||(z&&z>zz+.4)}
+  else{map.setView([lat,lon],zz,{animate:false});var far=z>zz}
+  mode='map';spinUser=performance.now();setUI();
+  let hid=false;const hideGlobe=()=>{if(!hid&&mode==='map'){hid=true;$('gl').classList.add('hide')}};satLayer.once('load',()=>setTimeout(hideGlobe,200));setTimeout(hideGlobe,4000);
+  fade($('map'),1,700,()=>{mapBusy=false;
+    if(lat!=null&&far)map.flyTo([lat,lon],z,{duration:2.4,easeLinearity:.2});if(search)$('q').focus()})}
+// desde lejos: el globo gira hasta el lugar y se acerca volando; luego pasa a satélite
+let dive=null;
+function diveTo(lat,lon,z){if(!(mode==='focus'&&focus&&focus.id==='tierra')){openMap(lat,lon,z);return}
+  const b=byId.tierra,q0=b.mesh.quaternion.clone();faceLatLon(lat,lon);const q1=b.mesh.quaternion.clone();b.mesh.quaternion.copy(q0);
+  dive={q0,q1,d0:foc.dist,d1:b.r*1.3,t:0,lat,lon,z};spinUser=performance.now()}
+function stepDive(dt){if(!dive)return;const b=byId.tierra;dive.t=Math.min(1,dive.t+dt/1.7);const k=dive.t<.5?2*dive.t*dive.t:1-Math.pow(-2*dive.t+2,2)/2;
+  b.mesh.quaternion.slerpQuaternions(dive.q0,dive.q1,k);foc.dist=Math.exp(Math.log(dive.d0)+(Math.log(dive.d1)-Math.log(dive.d0))*k);
+  const p=worldPos(b);camTarget.copy(p);camPos.copy(p.clone().add(viewDir().multiplyScalar(foc.dist)));spinUser=performance.now();
+  if(dive.t>=1){const d=dive;dive=null;openMap(d.lat,d.lon,d.z)}}
+function closeMap(){if(!map||mode!=='map')return;mapBusy=true;
+  const W=innerWidth,H=innerHeight,c=map.containerPointToLatLng([W/2,H/2-viewOffY]),lat=Math.max(-80,Math.min(80,c.lat)),lon=((c.lng+540)%360)-180;
+  mode='focus';faceLatLon(lat,lon);foc.dist=Math.max(foc.min*1.25,Math.min(foc.max,globeDistForZoom(map.getZoom(),lat)));
+  const p=worldPos(byId.tierra);camTarget.copy(p);camPos.copy(p.clone().add(viewDir().multiplyScalar(foc.dist)));
+  $('gl').classList.remove('hide');spinUser=performance.now();setUI();
+  fade($('map'),0,700,()=>{if(mode!=='map')$('map').classList.add('hide');mapBusy=false})}
 async function find(){const q=$('q').value.trim();if(!q)return;toast('Buscando…');
   try{const r=await fetch('https://nominatim.openstreetmap.org/search?format=json&limit=1&accept-language=es&q='+encodeURIComponent(q));const j=await r.json();
     if(!j.length){toast('No encontré ese lugar');return}const bb=j[0].boundingbox.map(Number);map.flyToBounds([[bb[0],bb[2]],[bb[1],bb[3]]],{duration:2,maxZoom:17});$('q').blur()}
@@ -253,10 +284,10 @@ function limitMsg(near){const now=performance.now();if(now-limT<2500)return;limT
   else if(mode==='focus'){if(near)toast(focus.id==='tierra'?'Sigue acercándote para pasar al mapa satelital':focus.id==='sol'?'Máximo acercamiento: del Sol no hay más detalle que ver de cerca.':'Máximo acercamiento a '+focus.name+'. Solo la Tierra tiene mapa satelital.');
     else toast(EMBED?'Aléjate un poco más para volver al viaje':'Máximo alejamiento. Toca «◀ Sistema solar» para ver los demás.')}
   else toast(near?'Máximo acercamiento del mapa':'Aléjate un poco más para volver al globo')}
-function zoomBy(f){if(V.on){V.sc=Math.max(1,Math.min(8,V.sc/f));vApply();return}if(mode==='system'){const n=sys.dist*f;if(EMBED&&n>120*1.02&&f>1){closeEmbed();return}if(n<18&&f<1)limitMsg(true);if(n>120&&f>1)limitMsg(false);sys.dist=Math.max(18,Math.min(120,n))}
-  else if(mode==='focus'){const n=foc.dist*f;if(EMBED&&n>foc.max*1.02&&f>1){closeEmbed();return}if(n<foc.min&&f<1&&focus.id!=='tierra')limitMsg(true);if(n>foc.max&&f>1)limitMsg(false);foc.dist=Math.max(foc.min,Math.min(foc.max,n));if(focus.id==='tierra'&&foc.dist<=foc.min*1.02&&f<1){const [la,lo]=latLonOfView();openMap(la,lo,4.2)}}
-  else{const z=map.getZoom()-Math.log2(f)*1.6;if(z>=map.getMaxZoom()&&f<1)limitMsg(true);map.setZoom(z,{animate:false})}}
-function dragBy(dx,dy){if(V.on){V.tx+=dx;V.ty+=dy;vApply();return}if(mode==='system'){sys.yaw-=dx*.006;sys.pitch=Math.max(.08,Math.min(1.45,sys.pitch+dy*.006))}
+function zoomBy(f){if(dive)return;if(V.on){V.sc=Math.max(1,Math.min(8,V.sc/f));vApply();return}if(mode==='system'){const n=sys.dist*f;if(EMBED&&n>120*1.02&&f>1){closeEmbed();return}if(n<18&&f<1)limitMsg(true);if(n>120&&f>1)limitMsg(false);sys.dist=Math.max(18,Math.min(120,n))}
+  else if(mode==='focus'){const n=foc.dist*f;if(EMBED&&n>foc.max*1.02&&f>1){closeEmbed();return}if(n<foc.min&&f<1&&focus.id!=='tierra')limitMsg(true);if(n>foc.max&&f>1)limitMsg(false);foc.dist=Math.max(foc.min,Math.min(foc.max,n));if(focus.id==='tierra'&&foc.dist<=byId.tierra.r*1.32&&f<1&&!mapBusy){openMap(null,null,null)}}
+  else{if(mapBusy)return;const z=map.getZoom()-Math.log2(f)*1.6;if(z>=map.getMaxZoom()&&f<1)limitMsg(true);map.setZoom(z,{animate:false})}}
+function dragBy(dx,dy){if(dive)return;if(V.on){V.tx+=dx;V.ty+=dy;vApply();return}if(mode==='system'){sys.yaw-=dx*.006;sys.pitch=Math.max(.08,Math.min(1.45,sys.pitch+dy*.006))}
   else if(mode==='focus'){spinUser=performance.now();const q=new THREE.Quaternion().setFromAxisAngle(Y,dx*.008);focus.mesh.quaternion.premultiply(q);
     const right=new THREE.Vector3().crossVectors(viewDir(),Y).normalize();focus.mesh.quaternion.premultiply(new THREE.Quaternion().setFromAxisAngle(right,-dy*.008))}
   else map.panBy([-dx,-dy],{animate:false})}
@@ -270,7 +301,7 @@ gl.addEventListener('pointermove',e=>{const p=ptrs.get(e.pointerId);if(!p)return
   else if(ptrs.size===2){ptrs.set(e.pointerId,np);const [a,b]=[...ptrs.values()],d=Math.hypot(a.x-b.x,a.y-b.y);if(pinch0)zoomBy(pinch0/d);pinch0=d;moved=99;return}
   ptrs.set(e.pointerId,np)});
 gl.addEventListener('pointerup',e=>{if(ptrs.size===1&&moved<8&&mode==='system'){const b=pickAt(e.clientX,e.clientY);if(b)enter(b)}
-  else if(ptrs.size===1&&moved<8&&mode==='focus'&&focus.id==='tierra'){const ll=earthLatLonAt(e.clientX,e.clientY);if(ll)openMap(ll[0],ll[1],5.5)}ptrs.delete(e.pointerId);pinch0=null});
+  else if(ptrs.size===1&&moved<8&&mode==='focus'&&focus.id==='tierra'){const ll=earthLatLonAt(e.clientX,e.clientY);if(ll)diveTo(ll[0],ll[1],8)}ptrs.delete(e.pointerId);pinch0=null});
 gl.addEventListener('pointercancel',e=>{ptrs.delete(e.pointerId);pinch0=null});
 gl.addEventListener('wheel',e=>zoomBy(Math.pow(1.0015,e.deltaY)),{passive:true});
 
@@ -289,6 +320,14 @@ function poseOf(k,s,hs,pinch){if(pinch)return'pinch';const st=fingers[k]=fingers
   const i=ext(8),m=ext(12),r=ext(16),p=ext(20);if(i&&m&&r&&p)return'open';if(i&&!m&&!r&&!p)return'point';if(i&&m&&!r&&!p)return'victory';if(!i&&!m&&!r&&!p)return'fist';return'other'}
 function stablePose(k,p){const m=poseMem[k]=poseMem[k]||{pose:p,cand:p,n:0};if(p===m.pose){m.cand=p;m.n=0;return p}
   const need=p==='pinch'?2:5;if(p===m.cand){if(++m.n>=need){m.pose=p;m.n=0}}else{m.cand=p;m.n=1}return m.pose}
+
+// zoom tipo foto con una mano: separar pulgar e índice acerca, juntarlos aleja (medio, anular y meñique doblados)
+const spreadPrev={};
+function spreadDelta(h){const s=h.s,hs=dist(s[0],s[9])||1,P=palmC(s);
+  const others=[12,16,20].every(j=>dist(s[j],P)/hs<1.0),idx=dist(s[8],P)/hs>.75;
+  if(!others||!idx){delete spreadPrev[h.k];return 0}
+  const r=dist(s[4],s[8])/hs,prev=spreadPrev[h.k];const sm=prev==null?r:prev*.5+r*.5;spreadPrev[h.k]=sm;
+  if(prev==null)return 0;const d=Math.log(sm/prev);return Math.abs(d)>.012?d:0}
 function readHands(res){const seen=new Set(),now=performance.now();
   hands=res.landmarks.map((l,i)=>{const k='h'+(res.handedness?.[i]?.[0]?.categoryName||i);seen.add(k);const s=l.map(toScreen),hs=dist(s[0],s[9])||1,ratio=dist(s[4],s[8])/hs;
     const pinch=!fistLike(s,hs)&&(pinchState[k]?ratio<pinchCfg.off:ratio<pinchCfg.on);pinchState[k]=pinch;return{k,s,tip:s[8],pinch,pose:stablePose(k,poseOf(k,s,hs,pinch))}});
@@ -297,7 +336,7 @@ function readHands(res){const seen=new Set(),now=performance.now();
   if(op.length===2){const d=dist(op[0].s[9],op[1].s[9]);if(open0)zoomBy(open0/d);open0=d}else open0=null;
   for(const h of hands){const c=h.s[9],pv=palmPrev[h.k];palmPrev[h.k]={x:c.x,y:c.y};
     if(h.pose==='fist'&&pv){const dx=c.x-pv.x,dy=c.y-pv.y;if(Math.hypot(dx,dy)>1.2)dragBy(dx*1.3,dy*1.3)}
-    if(h.pose==='pinch'&&pv){const dy=c.y-pv.y;if(Math.abs(dy)>1)zoomBy(Math.pow(1.006,dy))}
+    if(h.pose!=='fist'&&h.pose!=='open'){const d=spreadDelta(h);if(d)zoomBy(Math.exp(-d*1.2))}else delete spreadPrev[h.k];
     const hd=hold[h.k]=hold[h.k]||{pose:null,t0:0,fired:false};if(hd.pose!==h.pose){hd.pose=h.pose;hd.t0=now;hd.fired=false}
     h.holdP=h.pose==='victory'&&!hd.fired?Math.min(1,(now-hd.t0)/1200):0;if(h.pose==='victory'&&!hd.fired&&now-hd.t0>=1200){hd.fired=true;toast('Atrás');goBack()}}}
 // apuntar y dejar quieto: botones y planetas
@@ -309,11 +348,11 @@ function dwell(dt){const h=hands.find(q=>q.pose==='point');let tgt=null,key=null
     else if(mode==='focus'&&focus&&focus.id==='tierra'&&e===gl){const ll=earthLatLonAt(h.tip.x,h.tip.y);if(ll){tgt={earth:ll,name:'Entrar aquí',x:h.tip.x,y:h.tip.y};key='earth'}}}else dwPrev=null;
   if(key!==dwKey){if(dwTarget&&dwTarget.style)dwTarget.style.setProperty('--p',0);dwKey=key;dwTarget=tgt;dwT=0}
   if(tgt){dwT+=dt;const p=Math.max(0,Math.min(1,dwT/.9));if(tgt.style)tgt.style.setProperty('--p',p);
-    if(dwT>=.9){dwT=-.8;if(tgt.click)tgt.click();else if(tgt.earth)openMap(tgt.earth[0],tgt.earth[1],5.5);else enter(tgt)}}}
+    if(dwT>=.9){dwT=-.8;if(tgt.click)tgt.click();else if(tgt.earth)diveTo(tgt.earth[0],tgt.earth[1],8);else enter(tgt)}}}
 function drawHands(){const W=innerWidth,H=innerHeight;octx.clearRect(0,0,W,H);
   for(const h of hands){const s=h.s;octx.strokeStyle='rgba(55,232,255,.3)';octx.lineWidth=1.5;octx.beginPath();for(const {start,end} of HandLandmarker.HAND_CONNECTIONS){octx.moveTo(s[start].x,s[start].y);octx.lineTo(s[end].x,s[end].y)}octx.stroke();
     octx.shadowColor='#37e8ff';octx.shadowBlur=14;octx.fillStyle='#37e8ff';octx.beginPath();octx.arc(h.tip.x,h.tip.y,7,0,7);octx.fill();octx.shadowBlur=0;
-    const lbl={point:'apuntar',fist:mode==='map'?'moviendo el mapa':'girando',open:hands.filter(q=>q.pose==='open').length>1?'zoom':'mano libre',pinch:'arriba/abajo: zoom',victory:'atrás'}[h.pose];
+    const lbl={point:'apuntar',fist:mode==='map'?'moviendo el mapa':'girando',open:hands.filter(q=>q.pose==='open').length>1?'zoom':'mano libre',pinch:'abre: acercar · cierra: alejar',victory:'atrás'}[h.pose];
     if(lbl){octx.font='700 15px Rajdhani,system-ui';octx.textAlign='center';octx.fillStyle='#37e8ff';octx.fillText(lbl,s[0].x,s[0].y+22)}
     if(h.holdP>0){octx.strokeStyle='#ffd23f';octx.lineWidth=5;octx.beginPath();octx.arc(s[9].x,s[9].y,30,-Math.PI/2,-Math.PI/2+Math.PI*2*h.holdP);octx.stroke()}}
   if(dwKey&&typeof dwKey==='string'&&dwTarget&&!dwTarget.style&&dwT>0){let x,y;if(dwTarget.earth){x=dwTarget.x;y=dwTarget.y}else{const p=worldPos(dwTarget).project(cam);x=(p.x+1)/2*W;y=(1-p.y)/2*H}
@@ -344,15 +383,15 @@ function frame(t){requestAnimationFrame(frame);const dt=Math.min(.05,(t-last)/10
     for(const b of B){if(!freeze&&b.period){b.angle+=dt*.25/b.period;b.pivot.rotation.y=b.angle}
       const idle=!spinUser||t-spinUser>4000;if(b.spin&&(b!==focus||idle))b.mesh.rotation.y+=dt*b.spin*(b===focus?.5:1)}
     if(byId.tierra.clouds)byId.tierra.clouds.rotation.y+=dt*.01;
-    updateCamera();renderer.render(scene,cam)}
+    stepDive(dt);if(!dive)updateCamera();else{cam.position.copy(camPos);cam.lookAt(camTarget)}renderer.render(scene,cam)}
   drawHands();drawLabels();drawGauge()}
 size();setUI();requestAnimationFrame(frame);
 
 /* ---------- inicio por enlace: #tierra, #luna, #colombia… ---------- */
 function fromHash(){const h=location.hash.slice(1);if(byId[h]){for(let i=0;i<60;i++)updateCamera();enter(byId[h])}
-  else if(h==='colombia'){enter(byId.tierra);setTimeout(()=>openMap(4.6,-74.1,5.3),600)}
+  else if(h==='colombia'){enter(byId.tierra);setTimeout(()=>diveTo(4.6,-74.1,5.6),700)}
   else if(h==='sistema')toSystem();
-  else if(h.startsWith('mapa=')){const [la,lo,z]=h.slice(5).split(',').map(Number);enter(byId.tierra);setTimeout(()=>openMap(la,lo,z||11),500)}}
+  else if(h.startsWith('mapa=')){const [la,lo,z]=h.slice(5).split(',').map(Number);enter(byId.tierra);setTimeout(()=>diveTo(la,lo,z||11),700)}}
 
 /* ---------- cámara ---------- */
 function fail(m){$('err').textContent=m;$('err').classList.remove('hide');$('start').disabled=false;$('start').textContent='Reintentar'}

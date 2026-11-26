@@ -68,7 +68,8 @@ button.on{background:rgba(55,232,255,.25)}
   <p>Empiezas en una persona. Desde ahí puedes ir hasta los quarks o hasta el universo observable.</p>
   <ul>
     <li>🙌 <b>Dos manos abiertas</b>: sepáralas para acercarte, júntalas para alejarte.</li>
-    <li>🤏 <b>Pellizco</b> y mover la mano: hacia arriba te alejas, hacia abajo te acercas.</li>
+    <li>🤏 <b>Zoom como en una foto</b>: separa pulgar e índice para acercarte, júntalos para alejarte.</li>
+    <li>☝️ Deja el índice quieto sobre un <b>círculo amarillo</b> para entrar a eso.</li>
     <li>☝️ Deja el <b>índice quieto</b> sobre un botón para presionarlo.</li>
     <li>En la pantalla: pellizca con dos dedos o arrastra hacia arriba o abajo.</li>
   </ul>
@@ -331,13 +332,21 @@ const fistLike=(s,hs)=>{const P=palmC(s);return dist(s[8],P)/hs<.85&&dist(s[12],
 
 function poseOf(s,hs,pinch){if(pinch)return'pinch';if(fistLike(s,hs))return'fist';const ext=j=>dist(s[j],palmC(s))/hs>1.15,i=ext(8),m=ext(12),r=ext(16),p=ext(20);
   if(i&&m&&r&&p)return'open';if(i&&!m&&!r&&!p)return'point';return'other'}
+
+// zoom tipo foto con una mano: separar pulgar e índice acerca, juntarlos aleja (medio, anular y meñique doblados)
+const spreadPrev={};
+function spreadDelta(h){const s=h.s,hs=dist(s[0],s[9])||1,P=palmC(s);
+  const others=[12,16,20].every(j=>dist(s[j],P)/hs<1.0),idx=dist(s[8],P)/hs>.75;
+  if(!others||!idx){delete spreadPrev[h.k];return 0}
+  const r=dist(s[4],s[8])/hs,prev=spreadPrev[h.k];const sm=prev==null?r:prev*.5+r*.5;spreadPrev[h.k]=sm;
+  if(prev==null)return 0;const d=Math.log(sm/prev);return Math.abs(d)>.012?d:0}
 function readHands(res){if(exploring){try{exploring.contentWindow.postMessage({type:'hands',landmarks:res.landmarks,handedness:res.handedness,vw:video.videoWidth||640,vh:video.videoHeight||480},'*')}catch(e){}hands=[];return}
   const seen=new Set();
   hands=res.landmarks.map((l,i)=>{const k='h'+(res.handedness?.[i]?.[0]?.categoryName||i);seen.add(k);const s=l.map(toScreen),hs=dist(s[0],s[9])||1,ratio=dist(s[4],s[8])/hs;
     const pinch=!fistLike(s,hs)&&(pinchState[k]?ratio<pinchCfg.off:ratio<pinchCfg.on);pinchState[k]=pinch;return{k,s,tip:s[8],pinch,pp:{x:(s[4].x+s[8].x)/2,y:(s[4].y+s[8].y)/2},pose:poseOf(s,hs,pinch)}});
   for(const k of Object.keys(pinchState))if(!seen.has(k)){delete pinchState[k];delete prevPinch[k]}
   // pellizco y mover: arriba = alejarse, abajo = acercarse
-  for(const h of hands){if(h.pinch){const pv=prevPinch[h.k];if(!pv){const sp=spotAt(h.pp.x,h.pp.y);if(sp){go(sp);prevPinch[h.k]={x:-1e4,y:-1e4,spot:1};continue}}if(pv&&pv.spot)continue;if(pv){stopAuto();zt=clampZ(zt-(h.pp.y-pv.y)/VH*7)}prevPinch[h.k]={...h.pp}}else delete prevPinch[h.k]}
+  for(const h of hands){if(h.pose!=='open'){const d=spreadDelta(h);if(d){stopAuto();zt=clampZ(zt-d*1.6)}}else delete spreadPrev[h.k]}
   // dos manos abiertas: separar = acercarse
   const op=hands.filter(h=>h.pose==='open');
   if(op.length===2){const d=dist(op[0].s[9],op[1].s[9]);if(open0){stopAuto();zt=clampZ(zt-Math.log10(d/open0)*4.5)}open0=d}else open0=null}
@@ -353,7 +362,7 @@ function drawHands(){octx.clearRect(0,0,VW,VH);
   if(spDw.sp&&spDw.t>0){const q=spDw.sp;octx.strokeStyle='#ffd23f';octx.lineWidth=4;octx.beginPath();octx.arc(q.px,q.py,q.pr+8,-Math.PI/2,-Math.PI/2+Math.PI*2*Math.min(1,spDw.t/.9));octx.stroke()}
   for(const h of hands){const s=h.s;octx.strokeStyle='rgba(55,232,255,.3)';octx.lineWidth=1.5;octx.beginPath();for(const {start,end} of HandLandmarker.HAND_CONNECTIONS){octx.moveTo(s[start].x,s[start].y);octx.lineTo(s[end].x,s[end].y)}octx.stroke();
     const p=h.pinch?h.pp:h.tip;octx.shadowColor='#37e8ff';octx.shadowBlur=14;octx.fillStyle=h.pinch?'#fff':'#37e8ff';octx.beginPath();octx.arc(p.x,p.y,h.pinch?10:7,0,7);octx.fill();octx.shadowBlur=0;
-    const lbl={pinch:'arriba: alejar · abajo: acercar',open:hands.filter(q=>q.pose==='open').length>1?'separa o junta':null,point:'apuntar'}[h.pose];
+    const lbl={pinch:'abre: acercar · cierra: alejar',open:hands.filter(q=>q.pose==='open').length>1?'separa o junta':null,point:'apuntar'}[h.pose];
     if(lbl){octx.font='700 14px Rajdhani,system-ui';octx.textAlign='center';octx.fillStyle='#37e8ff';octx.fillText(lbl,s[0].x,s[0].y+22)}}}
 
 /* ---------- bucle ---------- */
