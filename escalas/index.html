@@ -119,11 +119,11 @@ const L=[
    for(let i=0;i<=40;i++){const x=x0+i*u/40,a=(x/wl)*Math.PI*2+ph,y1=Math.sin(a)*amp,y2=Math.sin(a+Math.PI)*amp;if(i%2===0){ctx.strokeStyle=pc[i/2%4];ctx.globalAlpha*=.8;ctx.lineWidth=3;ctx.beginPath();ctx.moveTo(x,y1);ctx.lineTo(x,y2);ctx.stroke();ctx.globalAlpha/=.8}}
    for(const off of[0,Math.PI]){glow(C,10);ctx.strokeStyle=W;ctx.lineWidth=3;ctx.beginPath();for(let i=0;i<=120;i++){const x=x0+i*u/120,y=Math.sin((x/wl)*Math.PI*2+ph+off)*amp;i?ctx.lineTo(x,y):ctx.moveTo(x,y)}ctx.stroke();noGlow()}
    label('doble hélice',0,u*.2,LS(u),C)}},
- {z:-6.7,name:'Virus',fact:'Un virus de la gripe mide unos 100 nm. En el grosor de un cabello cabrían unos mil, uno al lado del otro.',
+ {z:-6.7,name:'Virus',photo:{src:'https://commons.wikimedia.org/wiki/Special:FilePath/EM_of_influenza_virus.jpg?width=900',w:.78,shape:'round',credit:'Foto real (microscopio electrónico): CDC, dominio público'},fact:'Un virus de la gripe mide unos 100 nm. En el grosor de un cabello cabrían unos mil, uno al lado del otro.',
   draw(u,t){const r=u*.25;glow(M,14);circ(0,0,r,M,'rgba(255,79,216,.08)',2.5);noGlow();
    for(let i=0;i<28;i++){const a=i/28*Math.PI*2+t*.1,x1=Math.cos(a)*r,y1=Math.sin(a)*r,x2=Math.cos(a)*r*1.18,y2=Math.sin(a)*r*1.18;ctx.strokeStyle=M;ctx.lineWidth=2;ctx.beginPath();ctx.moveTo(x1,y1);ctx.lineTo(x2,y2);ctx.stroke();circ(x2,y2,u*.012+1,null,Y)}
    ctx.setLineDash([4,5]);circ(0,0,r*.6,'rgba(255,79,216,.6)',null,1.5);ctx.setLineDash([]);label('material genético',0,0,LS(u),M)}},
- {z:-4.6,name:'Célula',fact:'Una célula humana típica mide entre 10 y 30 micrómetros. Tu cuerpo tiene alrededor de 37 billones de ellas.',
+ {z:-4.6,name:'Células de la sangre',photo:{src:'https://commons.wikimedia.org/wiki/Special:FilePath/SEM_blood_cells.jpg?width=900',w:.62,shape:'round',credit:'Foto real (microscopio electrónico): Instituto Nacional del Cáncer de EE. UU., dominio público'},fact:'Foto real con microscopio electrónico: glóbulos rojos (los discos), glóbulos blancos y plaquetas. Un glóbulo rojo mide unos 7 micrómetros, y tu cuerpo tiene alrededor de 37 billones de células.',
   draw(u,t){const rr=rng(7),pts=[];for(let i=0;i<40;i++){const a=i/40*Math.PI*2,r=u*.3*(1+Math.sin(a*3+t*.5)*.04+Math.sin(a*5)*.03);pts.push([Math.cos(a)*r,Math.sin(a)*r])}
    glow(G,14);poly(pts,G,'rgba(93,255,154,.06)',2.5);noGlow();circ(u*.02,-u*.02,u*.1,C,'rgba(55,232,255,.15)',2);circ(u*.04,-u*.03,u*.03,null,'rgba(55,232,255,.6)');
    for(let i=0;i<5;i++){const a=rr()*6.28,d=u*(.15+rr()*.08);ctx.save();ctx.translate(Math.cos(a)*d,Math.sin(a)*d);ctx.rotate(a);ctx.strokeStyle=O;ctx.lineWidth=2;ctx.beginPath();ctx.ellipse(0,0,u*.04,u*.017,0,0,7);ctx.stroke();ctx.restore()}
@@ -160,7 +160,7 @@ const L=[
    const cities=[['Bogotá',-74.07,4.71],['Medellín',-75.57,6.25],['Cali',-76.53,3.45],['Barranquilla',-74.8,10.96],['Cartagena',-75.5,10.4]];
    for(const [n,lo,la] of cities){const [x,y]=P([lo,la]);circ(x,y,3,null,W);label(n,x+6,y,LS(u)*.9,W,'left')}
    label('mar Caribe',P([-77,12.2])[0],P([-77,12.2])[1],LS(u),B);label('océano',P([-80.8,3.6])[0],P([-80.8,3.6])[1],LS(u),B);label('Pacífico',P([-80.8,3.6])[0],P([-80.8,3.6])[1]+LS(u)+2,LS(u),B)}},
- {z:7.25,name:'La Tierra',fact:'La Tierra mide 12.742 km de diámetro. La luz podría darle más de 7 vueltas en un solo segundo.',
+ {z:7.25,name:'La Tierra',photo:{src:'https://upload.wikimedia.org/wikipedia/commons/thumb/9/97/The_Earth_seen_from_Apollo_17.jpg/1024px-The_Earth_seen_from_Apollo_17.jpg',w:.76,shape:'circle',credit:'Foto real tomada desde el Apolo 17 (1972): NASA, dominio público'},fact:'La Tierra mide 12.742 km de diámetro. La luz podría darle más de 7 vueltas en un solo segundo.',
   draw(u,t){const r=u*.358,g=ctx.createRadialGradient(-r*.3,-r*.3,r*.1,0,0,r);g.addColorStop(0,'rgba(91,140,255,.45)');g.addColorStop(1,'rgba(10,30,70,.6)');
    glow(B,22);circ(0,0,r,C,g,2);noGlow();ctx.save();ctx.beginPath();ctx.arc(0,0,r,0,7);ctx.clip();ctx.strokeStyle='rgba(55,232,255,.35)';ctx.lineWidth=1;
    for(let i=-2;i<=2;i++){ctx.beginPath();ctx.ellipse(0,i*r*.35,r*Math.sqrt(1-(i*.35)**2),r*.06,0,0,7);ctx.stroke()}
@@ -181,11 +181,11 @@ const L=[
    glow(Y,14);circ(0,0,4,null,Y);noGlow();label('Sol',0,14,LS(u),Y);
    const st=[['Alfa Centauri · 4,4 años luz',4.37,2.4,W],['Estrella de Barnard · 6 años luz',5.96,-1,O],['Sirio · 8,6 años luz',8.6,.6,C]];
    for(const [n,d,a,c] of st){const x=Math.cos(a)*d*ly,y=Math.sin(a)*d*ly;glow(c,12);circ(x,y,4,null,c);noGlow();ctx.setLineDash([2,5]);ctx.strokeStyle='rgba(216,251,255,.25)';ctx.beginPath();ctx.moveTo(0,0);ctx.lineTo(x,y);ctx.stroke();ctx.setLineDash([]);label(n,x,y-13,LS(u),c)}}},
- {z:21.1,name:'Vía Láctea',fact:'Nuestra galaxia mide unos 100.000 años luz de lado a lado y tiene entre 100.000 y 400.000 millones de estrellas.',
+ {z:21.1,name:'Vía Láctea',photo:{src:'https://upload.wikimedia.org/wikipedia/commons/thumb/0/09/Milky_Way_2005.jpg/1024px-Milky_Way_2005.jpg',w:.8,shape:'circle',credit:'Ilustración de NASA/JPL-Caltech basada en datos reales (nadie ha salido de la galaxia a fotografiarla)'},fact:'Nuestra galaxia mide unos 100.000 años luz de lado a lado y tiene entre 100.000 y 400.000 millones de estrellas.',
   draw(u,t){const rr=rng(9),R=u*.36;ctx.save();ctx.rotate(t*.02);const g=ctx.createRadialGradient(0,0,0,0,0,R*.3);g.addColorStop(0,'rgba(255,230,170,.7)');g.addColorStop(1,'rgba(255,230,170,0)');ctx.fillStyle=g;ctx.beginPath();ctx.arc(0,0,R*.3,0,7);ctx.fill();
    for(let i=0;i<1400;i++){const arm=i%4,f=rr(),r=R*(.12+f*.88),a=arm*Math.PI/2+Math.log(r/(R*.1))*1.8+(rr()-.5)*.5;ctx.fillStyle=rr()<.2?'rgba(255,210,63,.8)':'rgba(170,230,255,.75)';ctx.fillRect(Math.cos(a)*r,Math.sin(a)*r,1.5,1.5)}
    ctx.restore();const sx=Math.cos(2.2)*R*.52,sy=Math.sin(2.2)*R*.52;glow(Y,12);circ(sx,sy,4,Y,null,2);noGlow();label('estás aquí',sx+8,sy,LS(u),Y,'left')}},
- {z:22.9,name:'Grupo Local',fact:'Andrómeda, la gran galaxia vecina, está a 2,5 millones de años luz y se acerca poco a poco a la nuestra.',
+ {z:22.9,name:'Grupo Local',photo:{src:'https://commons.wikimedia.org/wiki/Special:FilePath/Andromeda_galaxy_2.jpg?width=900',w:.32,x:.14,y:-.06,shape:'round',keep:true,credit:'Andrómeda, foto real del telescopio GALEX: NASA/JPL-Caltech, dominio público'},fact:'Andrómeda, la gran galaxia vecina, está a 2,5 millones de años luz y se acerca poco a poco a la nuestra.',
   draw(u,t){const rr=rng(4);function gal(x,y,r,rot,col){ctx.save();ctx.translate(x,y);ctx.rotate(rot);ctx.scale(1,.45);const g=ctx.createRadialGradient(0,0,0,0,0,r);g.addColorStop(0,col);g.addColorStop(1,'rgba(0,0,0,0)');ctx.fillStyle=g;ctx.beginPath();ctx.arc(0,0,r,0,7);ctx.fill();ctx.restore()}
    gal(-u*.15,u*.05,u*.07,.3,'rgba(170,230,255,.9)');gal(u*.14,-u*.06,u*.1,-.6,'rgba(255,220,180,.9)');gal(u*.2,u*.05,u*.035,.8,'rgba(170,230,255,.7)');
    for(let i=0;i<40;i++)circ((rr()-.5)*u*.8,(rr()-.5)*u*.7,1.2,null,'rgba(216,251,255,.5)');
@@ -195,12 +195,24 @@ const L=[
    ctx.strokeStyle='rgba(55,232,255,.25)';ctx.lineWidth=1.2;for(const a of nodes){const near=nodes.map(b=>[Math.hypot(a[0]-b[0],a[1]-b[1]),b]).sort((p,q)=>p[0]-q[0]).slice(1,4);for(const [,b] of near){ctx.beginPath();ctx.moveTo(a[0],a[1]);ctx.lineTo(b[0],b[1]);ctx.stroke()}}
    for(const [x,y] of nodes){for(let k=0;k<6;k++)circ(x+(rr()-.5)*u*.03,y+(rr()-.5)*u*.03,1.1,null,'rgba(216,251,255,.75)')}
    glow(Y,10);circ(nodes[0][0],nodes[0][1],4,Y,null,2);noGlow();label('estamos aquí',nodes[0][0]+8,nodes[0][1],LS(u),Y,'left')}},
- {z:26.95,name:'Universo observable',fact:'Lo que podemos ver del universo mide unos 93.000 millones de años luz de diámetro. Más allá, la luz todavía no ha tenido tiempo de llegarnos.',
+ {z:26.95,name:'Universo observable',photo:{src:'https://commons.wikimedia.org/wiki/Special:FilePath/Hubble_ultra_deep_field.jpg?width=1000',w:.9,shape:'circle',keep:true,alpha:.55,credit:'Dentro: Campo Ultra Profundo del Hubble, foto real con unas 10.000 galaxias. NASA/ESA'},fact:'Lo que podemos ver del universo mide unos 93.000 millones de años luz de diámetro. Más allá, la luz todavía no ha tenido tiempo de llegarnos.',
   draw(u,t){const R=u*.47,rr=rng(33);const g=ctx.createRadialGradient(0,0,R*.85,0,0,R);g.addColorStop(0,'rgba(255,154,60,0)');g.addColorStop(1,'rgba(255,154,60,.45)');ctx.fillStyle=g;ctx.beginPath();ctx.arc(0,0,R,0,7);ctx.fill();
    for(let i=0;i<1600;i++){const a=rr()*6.28,r=Math.sqrt(rr())*R*.96,cl=Math.sin(a*7)*Math.sin(r*.05)>.1;if(!cl&&rr()<.6)continue;ctx.fillStyle='rgba(170,230,255,.6)';ctx.fillRect(Math.cos(a)*r,Math.sin(a)*r,1.3,1.3)}
    glow(Y,12);circ(0,0,4,null,Y);noGlow();label('nosotros, en el centro de lo que vemos',0,16,LS(u),Y);label('luz más antigua: fondo cósmico',0,-R-12,LS(u),O)}},
 ];
 const ZMIN=L[0].z-.4,ZMAX=L[L.length-1].z+.3;
+for(const l of L)if(l.photo){const im=new Image();im.decoding='async';im.referrerPolicy='no-referrer';im.src=l.photo.src;l.photo.img=im}
+const photoOk=l=>l.photo&&l.photo.img.complete&&l.photo.img.naturalWidth>0;
+function drawScene(l,u,t){const ph=l.photo;
+  if(!photoOk(l)){l.draw(u,t);return}
+  if(ph.keep){const a=ctx.globalAlpha;if(ph.alpha){l.draw(u,t)}else l.draw(u,t);ctx.globalAlpha=a}
+  const im=ph.img,w=u*ph.w,h=w*im.naturalHeight/im.naturalWidth,x=(ph.x||0)*u,y=(ph.y||0)*u,a0=ctx.globalAlpha;
+  ctx.save();ctx.beginPath();
+  if(ph.shape==='circle')ctx.arc(x,y,w/2,0,7);else if(ctx.roundRect)ctx.roundRect(x-w/2,y-h/2,w,h,Math.min(w,h)*.08);else ctx.rect(x-w/2,y-h/2,w,h);
+  ctx.clip();ctx.globalAlpha=a0*(ph.alpha||1);const sc=ph.shape==='circle'?Math.max(w/im.naturalWidth,w/im.naturalHeight):1;
+  const dw=ph.shape==='circle'?im.naturalWidth*sc:w,dh=ph.shape==='circle'?im.naturalHeight*sc:h;ctx.drawImage(im,x-dw/2,y-dh/2,dw,dh);ctx.restore();
+  ctx.globalAlpha=a0;ctx.strokeStyle='rgba(55,232,255,.5)';ctx.lineWidth=1.5;ctx.beginPath();if(ph.shape==='circle')ctx.arc(x,y,w/2,0,7);else if(ctx.roundRect)ctx.roundRect(x-w/2,y-h/2,w,h,Math.min(w,h)*.08);ctx.stroke();
+}
 
 /* ---------- formato de longitudes ---------- */
 function num(v,d=0){return v.toLocaleString('es-CO',{maximumFractionDigits:d,minimumFractionDigits:0})}
@@ -232,14 +244,14 @@ function render(t){
   const a=L[i],b=L[i+1],f=Math.max(0,Math.min(1,(z-a.z)/(b.z-a.z))),sm=f*f*(3-2*f);
   const draws=[[i,1-sm],[i+1,sm]];if(z<L[0].z)draws.splice(1,1);if(z>L[L.length-1].z)draws.splice(0,1);
   for(const [j,al] of draws){if(al<.02)continue;const s=Math.pow(10,(L[j].z-z)*.75),u=base*s;if(u>base*60||u<2)continue;
-    ctx.save();ctx.translate(cx,cy);ctx.globalAlpha=al;L[j].draw(u,t/1000);ctx.restore()}
+    ctx.save();ctx.translate(cx,cy);ctx.globalAlpha=al;drawScene(L[j],u,t/1000);ctx.restore()}
   ctx.globalAlpha=1;
   // regla de escala
   const rw=base*.3,rx=cx-rw/2,ry=Math.min(bot-18,cy+base*.5+4);ctx.strokeStyle=Y;ctx.lineWidth=2;ctx.beginPath();ctx.moveTo(rx,ry-5);ctx.lineTo(rx,ry);ctx.lineTo(rx+rw,ry);ctx.lineTo(rx+rw,ry-5);ctx.stroke();
   const fw=Math.pow(10,z)*(rw/base);label(fmtLen(fw),cx,ry-12,13,Y);
   // textos
   const e=Math.round(z);$('sExp').textContent='Ancho de la vista ≈ '+expTxt(e);$('sLen').textContent=fmtLen(Math.pow(10,z));
-  const n=nearest();if(n!==lastLevel){lastLevel=n;$('iName').textContent=L[n].name;$('iSize').textContent='Ancho de esta vista: unos '+fmtLen(Math.pow(10,L[n].z));$('iFact').textContent=L[n].fact;const go={'Ciudad':'colombia','Colombia':'colombia','La Tierra':'tierra','La Tierra y la Luna':'luna','Sistema solar':'sistema'}[L[n].name];$('bEnter').classList.toggle('hide',!go);$('bEnter').onclick=()=>{location.href='../explorar/#'+go}}
+  const n=nearest();if(n!==lastLevel){lastLevel=n;$('iName').textContent=L[n].name;$('iSize').textContent='Ancho de esta vista: unos '+fmtLen(Math.pow(10,L[n].z));$('iFact').textContent=L[n].fact+(L[n].photo?' · '+L[n].photo.credit+'.':'');const go={'Ciudad':'colombia','Colombia':'colombia','La Tierra':'tierra','La Tierra y la Luna':'luna','Sistema solar':'sistema'}[L[n].name];$('bEnter').classList.toggle('hide',!go);$('bEnter').onclick=()=>{location.href='../explorar/#'+go}}
   $('info').style.opacity=Math.abs(L[n].z-z)<.8?1:.55;
   drawTrack()}
 function zToY(v,h){return 10+(1-(v-ZMIN)/(ZMAX-ZMIN))*(h-20)}
