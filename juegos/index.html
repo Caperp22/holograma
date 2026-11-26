@@ -221,28 +221,29 @@ const rea={
 
 /* ---------- escenas ---------- */
 const games={cut,thr,shd,rea};
-const meta={cut:['Cortar hologramas','Corta con el índice. Evita las rojas.'],thr:['Atrapa y lanza','Pellizca el orbe y lánzalo. 60 s.'],shd:['Escudo de energía','Abre la mano y bloquea los disparos.'],rea:['Armar el reactor','Lleva cada pieza a su hueco.']};
+const meta={cut:['Cortar hologramas','Corta con el índice. Evita las rojas.'],thr:['Atrapa y lanza','Pellizca el orbe y lánzalo. 60 s.'],shd:['Escudo de energía','Abre la mano y bloquea los disparos.'],rea:['Armar el reactor','Lleva cada pieza a su hueco.'],rub:['Cubo Rubik','Aprende a armarlo paso a paso.']};
 const S={scene:'menu',game:null,t:0,rec:false};
 function play(id){S.game=id;S.scene='play';S.t=0;parts=[];games[id].init()}
 function toMenu(){S.scene='menu';S.game=null;parts=[]}
-function bestTxt(id){const b=getBest(id);if(b==null)return'Sin récord';return id==='rea'?`Mejor: ${b.toFixed(1)} s`:`Récord: ${b}`}
+function bestTxt(id){if(id==='rub'){let n=0;try{n=Object.keys(JSON.parse(localStorage.getItem('holo-rubik-done')||'{}')).length}catch(e){}return`Niveles: ${n} de 7`}const b=getBest(id);if(b==null)return'Sin récord';return id==='rea'?`Mejor: ${b.toFixed(1)} s`:`Récord: ${b}`}
 
 function icon(id,x,y,r){ctx.strokeStyle=C;ctx.lineWidth=2.5;glow(C,12);
   if(id==='cut'){poly(x,y,r,6,.3);ctx.stroke();ctx.strokeStyle='#fff';ctx.beginPath();ctx.moveTo(x-r*1.3,y+r*.9);ctx.lineTo(x+r*1.3,y-r*.9);ctx.stroke()}
   if(id==='thr'){ctx.beginPath();ctx.arc(x+r*.5,y-r*.3,r*.7,0,7);ctx.stroke();ctx.beginPath();ctx.arc(x+r*.5,y-r*.3,r*.3,0,7);ctx.stroke();ctx.fillStyle=C;ctx.beginPath();ctx.arc(x-r*.8,y+r*.6,r*.3,0,7);ctx.fill()}
   if(id==='shd'){ctx.beginPath();ctx.arc(x,y,r*.35,0,7);ctx.stroke();ctx.lineWidth=4;ctx.beginPath();ctx.arc(x,y,r,-2.2,-.9);ctx.stroke();ctx.fillStyle=ORA;ctx.beginPath();ctx.arc(x+r*1.1,y-r*1.1,r*.18,0,7);ctx.fill()}
   if(id==='rea'){ctx.beginPath();ctx.arc(x,y,r,0,7);ctx.stroke();for(let i=0;i<6;i++){const a=i/6*Math.PI*2;ctx.fillStyle=COLS[i];ctx.beginPath();ctx.arc(x+Math.cos(a)*r,y+Math.sin(a)*r,r*.2,0,7);ctx.fill()}}
+  if(id==='rub'){const q=r*.62;for(let i=0;i<3;i++)for(let j=0;j<3;j++){ctx.fillStyle=['#ffd500','#ff7a00','#19d65a','#f2f6fa','#ff2a3a','#1f6fff'][(i*3+j*2)%6];ctx.fillRect(x-r+j*q*1.08,y-r+i*q*1.08,q,q)}}
   noGlow()}
 
 function drawMenu(){
   const land=W>H*1.2,g=U*3,top=land?H*.2:H*.17;
   glow(C,18);txt('Holo Arcade',W/2,top*.5,clamp(U*11,32,52),C);noGlow();
   wrapTxt('Deja el dedo índice quieto sobre un juego para elegirlo',W/2,top*.5+clamp(U*9,30,42),W*.88,clamp(U*4,14,17));
-  const ids=['cut','thr','shd','rea'],cols=land?4:2,rows=land?1:2;
+  const ids=['cut','thr','shd','rea','rub'],cols=land?5:2,rows=land?1:3;
   const bw=(W-g*(cols+1))/cols,availH=H-top-U*22,bh=Math.min(land?bw*1.15:bw*1.05,(availH-g*(rows-1))/rows);
   const y0=top+g+(availH-(bh*rows+g*(rows-1)))/2;
-  ids.forEach((id,i)=>{const cx=i%cols,cy=i/cols|0,x=g+cx*(bw+g),y=y0+cy*(bh+g);
-    button(id,x,y,bw,bh,'',()=>play(id),{need:1,custom:b=>{const on=dwell.id===b.id;rrect(b.x,b.y,b.w,b.h,16);ctx.fillStyle=on?'rgba(10,50,62,.9)':'rgba(2,20,28,.78)';ctx.fill();
+  ids.forEach((id,i)=>{const cx=i%cols,cy=i/cols|0,x=g+cx*(bw+g),y=y0+cy*(bh+g),wide=!land&&i===4;
+    button(id,x,y,wide?W-2*g:bw,bh,'',()=>{if(id==='rub')location.href='../rubik/';else play(id)},{need:1,custom:b=>{const on=dwell.id===b.id;rrect(b.x,b.y,b.w,b.h,16);ctx.fillStyle=on?'rgba(10,50,62,.9)':'rgba(2,20,28,.78)';ctx.fill();
       glow(C,on?20:6);ctx.strokeStyle=C;ctx.lineWidth=on?3:1.5;ctx.stroke();noGlow();
       if(on){ctx.save();rrect(b.x,b.y,b.w,b.h,16);ctx.clip();ctx.fillStyle='rgba(55,232,255,.22)';const f=dwell.t/b.need;ctx.fillRect(b.x,b.y+b.h*(1-f),b.w,b.h*f);ctx.restore()}
       const ir=Math.min(b.w,b.h)*.14;icon(id,b.x+b.w/2,b.y+b.h*.3,ir);

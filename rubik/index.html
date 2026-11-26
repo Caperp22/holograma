@@ -1,0 +1,319 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<title>Holo Rubik</title>
+<link href="https://fonts.googleapis.com/css2?family=Rajdhani:wght@500;700&display=swap" rel="stylesheet">
+<style>
+:root{--c:#37e8ff;--bg:#02070b;--ink:#d8fbff;--y:#ffd23f}
+*{box-sizing:border-box;min-width:0}
+html,body{margin:0;height:100%;background:var(--bg);color:var(--ink);font:16px/1.35 Rajdhani,system-ui,sans-serif;overflow:hidden;touch-action:none;user-select:none;-webkit-user-select:none}
+video{position:fixed;inset:0;width:100%;height:100%;object-fit:cover;opacity:.22;filter:saturate(.3) brightness(.85);transform:scaleX(-1)}
+canvas{position:fixed;inset:0;width:100%;height:100%}
+#ov{pointer-events:none;z-index:3}
+button{--p:0;font:inherit;font-weight:700;color:var(--c);border:1px solid var(--c);border-radius:10px;min-height:44px;padding:0 12px;cursor:pointer;
+  background:linear-gradient(90deg,rgba(55,232,255,.32) calc(var(--p)*100%),rgba(2,20,28,.82) 0)}
+button:focus-visible{outline:2px solid #fff;outline-offset:2px}
+button.on{background:rgba(55,232,255,.25)}
+#top{position:fixed;left:0;right:0;top:0;z-index:2;display:flex;gap:8px;align-items:center;padding:max(10px,env(safe-area-inset-top)) 10px 0}
+#title{flex:1;text-align:center;font-weight:700;font-size:18px;text-shadow:0 0 10px var(--c);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+#panel{position:fixed;left:0;right:0;bottom:0;z-index:2;padding:10px 10px max(10px,env(safe-area-inset-bottom));background:linear-gradient(to top,rgba(2,7,11,.95) 70%,rgba(2,7,11,0));display:flex;flex-direction:column;gap:8px;max-width:760px;margin:0 auto}
+#guide{border:1px solid rgba(55,232,255,.35);border-radius:12px;padding:10px 12px;background:rgba(2,20,28,.7)}
+#gStage{font-size:14px;color:var(--y);font-weight:700}
+#gTitle{font-size:19px;font-weight:700;margin:2px 0}
+#gText{font-size:15px;color:rgba(216,251,255,.85)}
+#gNext{display:flex;align-items:center;gap:12px;margin-top:8px}
+#gMove{font-size:40px;font-weight:700;line-height:1;color:#fff;text-shadow:0 0 14px var(--c);min-width:64px;text-align:center}
+#gMoveTxt{font-size:16px;font-weight:700;color:var(--c)}
+#gSeq{display:flex;flex-wrap:wrap;gap:4px;margin-top:6px}
+#gSeq span{font-weight:700;font-size:14px;padding:1px 6px;border-radius:6px;background:rgba(55,232,255,.08);color:rgba(216,251,255,.6)}
+#gSeq span.done{color:rgba(216,251,255,.3);text-decoration:line-through}
+#gSeq span.cur{background:var(--c);color:#02070b}
+.row{display:flex;gap:6px;flex-wrap:wrap}.row button{flex:1}
+#pad{display:grid;grid-template-columns:repeat(6,minmax(0,1fr));gap:5px}
+#pad button{padding:0;min-height:42px;font-size:17px}
+#toast{position:fixed;left:50%;top:70px;transform:translateX(-50%);z-index:4;background:rgba(2,20,28,.9);border:1px solid var(--c);border-radius:10px;padding:8px 14px;font-weight:700;opacity:0;transition:opacity .3s;pointer-events:none;max-width:90vw;text-align:center}
+.sheet{position:fixed;inset:0;z-index:5;display:grid;place-items:center;padding:20px;background:radial-gradient(circle at 50% 30%,rgba(6,48,58,.95),rgba(2,7,11,.98) 70%);overflow:auto}
+.sheet .box{width:100%;max-width:460px}
+.sheet h1{font-size:40px;line-height:1.05;margin:0 0 8px;color:var(--c);text-shadow:0 0 16px var(--c)}
+.sheet h2{font-size:30px;margin:0 0 8px;color:var(--c);text-shadow:0 0 12px var(--c)}
+.sheet p{margin:6px 0 12px;color:rgba(216,251,255,.85)}
+.sheet button{width:100%;margin-top:8px;min-height:50px;font-size:18px;text-align:left;display:flex;align-items:center;justify-content:space-between;gap:8px}
+.sheet button small{font-weight:500;color:var(--y);font-size:14px}
+#err{color:#ff9a9a}
+.hide{display:none!important}
+@media (min-width:700px){#panel{left:auto;right:12px;bottom:12px;width:400px;background:none}}
+</style>
+</head>
+<body>
+<video id="video" playsinline muted></video>
+<canvas id="gl"></canvas>
+<canvas id="ov"></canvas>
+
+<div id="top">
+  <button id="bMenu">Menú</button>
+  <div id="title">Holo Rubik</div>
+  <button id="bLevels">Niveles</button>
+</div>
+
+<div id="panel">
+  <div id="guide">
+    <div id="gStage"></div>
+    <div id="gTitle"></div>
+    <div id="gText"></div>
+    <div id="gNext"><div id="gMove"></div><div id="gMoveTxt"></div></div>
+    <div id="gSeq"></div>
+  </div>
+  <div class="row">
+    <button id="bHint">Pista</button>
+    <button id="bAuto">Hazlo por mí</button>
+    <button id="bUndo">Deshacer</button>
+    <button id="bPad">Botones</button>
+  </div>
+  <div id="pad" class="hide"></div>
+  <div class="row" id="freeRow">
+    <button id="bScr">Mezclar</button>
+    <button id="bReset">Armar</button>
+    <button id="bView">Centrar vista</button>
+  </div>
+</div>
+<div id="toast"></div>
+
+<div id="intro" class="sheet"><div class="box">
+  <h1>Holo Rubik</h1>
+  <p>Aprende a armar el cubo paso a paso. <b>Pellizca un cuadro y arrastra</b> para girar esa capa. Pellizca fuera del cubo o cierra el puño para darle vuelta y verlo por todos lados. Para tocar un botón, deja el dedo índice quieto encima.</p>
+  <button id="start">Activar cámara</button>
+  <button id="touch">Usar el dedo en la pantalla</button>
+  <p id="err" class="hide"></p>
+</div></div>
+
+<div id="levels" class="sheet hide"><div class="box">
+  <h2>Elige cómo jugar</h2>
+  <p>Los niveles siguen el método para principiantes. Cada uno empieza con lo anterior ya resuelto.</p>
+  <div id="lvList"></div>
+</div></div>
+
+<div id="done" class="sheet hide"><div class="box">
+  <h2 id="dTitle">¡Nivel completado!</h2>
+  <p id="dText"></p>
+  <button id="dNext">Siguiente nivel</button>
+  <button id="dAgain">Repetir este nivel</button>
+  <button id="dLevels">Ver niveles</button>
+</div></div>
+
+<script type="module">
+import * as THREE from 'https://cdn.jsdelivr.net/npm/three@0.160.0/build/three.module.js';
+import {FilesetResolver, HandLandmarker} from 'https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@0.10.14/vision_bundle.mjs';
+import * as C from './core.js';
+{
+const $=id=>document.getElementById(id);
+const WASM='https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@0.10.14/wasm';
+const MODEL='https://storage.googleapis.com/mediapipe-models/hand_landmarker/hand_landmarker/float16/1/hand_landmarker.task';
+const COL=[0xffd500,0xff7a00,0x19d65a,0xf2f6fa,0xff2a3a,0x1f6fff];
+const FACE_OF={'0,1,0':'U','0,-1,0':'D','1,0,0':'R','-1,0,0':'L','0,0,1':'F','0,0,-1':'B'};
+
+/* ---------- escena ---------- */
+const renderer=new THREE.WebGLRenderer({canvas:$('gl'),antialias:true,alpha:true});
+renderer.setPixelRatio(Math.min(devicePixelRatio,2));
+const scene=new THREE.Scene(),cam=new THREE.PerspectiveCamera(40,1,.1,100);
+const cube=new THREE.Group();scene.add(cube);const pivot=new THREE.Group();cube.add(pivot);
+const view={x:.5,y:-.7,tx:.5,ty:-.7};
+const bodies=[],stickers=[];
+const bodyGeo=new THREE.BoxGeometry(.96,.96,.96),edgeGeo=new THREE.EdgesGeometry(bodyGeo);
+for(const x of[-1,0,1])for(const y of[-1,0,1])for(const z of[-1,0,1]){if(!x&&!y&&!z)continue;
+  const g=new THREE.Group();g.add(new THREE.Mesh(bodyGeo,new THREE.MeshBasicMaterial({color:0x04121a,transparent:true,opacity:.9})));
+  g.add(new THREE.LineSegments(edgeGeo,new THREE.LineBasicMaterial({color:0x37e8ff,transparent:true,opacity:.45})));
+  g.userData.p=[x,y,z];cube.add(g);bodies.push(g)}
+const stGeo=new THREE.PlaneGeometry(.84,.84),Z=new THREE.Vector3(0,0,1);
+C.SLOTS.forEach((s,i)=>{const m=new THREE.Mesh(stGeo,new THREE.MeshBasicMaterial({color:COL[s.face],transparent:true,side:THREE.DoubleSide}));m.userData.slot=i;cube.add(m);stickers.push(m)});
+let state=C.SOLVED.slice();
+function layout(){
+  for(const b of bodies){cube.attach(b);b.position.set(...b.userData.p);b.rotation.set(0,0,0)}
+  stickers.forEach((m,i)=>{cube.attach(m);const s=C.SLOTS[i];m.position.set(s.p[0]+s.n[0]*.49,s.p[1]+s.n[1]*.49,s.p[2]+s.n[2]*.49);m.quaternion.setFromUnitVectors(Z,new THREE.Vector3(...s.n));m.material.color.setHex(COL[state[i]]);m.material.opacity=1});
+  pivot.quaternion.identity();
+}
+layout();
+
+/* flecha guía */
+const arrow=new THREE.Group();cube.add(arrow);arrow.visible=false;
+{const arc=Math.PI*1.45,r=2.25,mat=new THREE.MeshBasicMaterial({color:0xffffff,transparent:true,opacity:.9});
+ arrow.add(new THREE.Mesh(new THREE.TorusGeometry(r,.06,8,64,arc),mat));
+ const cone=new THREE.Mesh(new THREE.ConeGeometry(.2,.45,16),mat);cone.position.set(r*Math.cos(arc),r*Math.sin(arc),0);cone.rotation.z=arc;arrow.add(cone)}
+let arrowMove=null;
+function showArrow(m){arrowMove=m;if(!m){arrow.visible=false;return}
+  const n=C.NORM[m[0]],cw=!m.endsWith("'"),dir=new THREE.Vector3(...n).multiplyScalar(cw?-1:1);
+  arrow.quaternion.setFromUnitVectors(Z,dir);arrow.position.set(n[0]*1.05,n[1]*1.05,n[2]*1.05);arrow.visible=true}
+
+function size(){const W=innerWidth,H=innerHeight;renderer.setSize(W,H,false);
+  const ov=$('ov'),r=Math.min(devicePixelRatio,2);ov.width=W*r;ov.height=H*r;octx.setTransform(r,0,0,r,0,0);
+  const topH=$('top').getBoundingClientRect().bottom+8,wide=W>=700,panH=wide?0:$('panel').getBoundingClientRect().height;
+  const availH=Math.max(160,H-topH-panH),availW=wide?W-424:W;const S=5.6,t=Math.tan(THREE.MathUtils.degToRad(20));
+  cam.aspect=W/H;const d=S*H/(2*t*Math.min(availH,availW));cam.position.set(0,0,d);
+  const cy=topH+availH/2,cx=wide?availW/2:W/2;cam.setViewOffset(W,H,W/2-cx,H/2-cy,W,H);cam.updateProjectionMatrix()}
+const octx=$('ov').getContext('2d');
+addEventListener('resize',size);new ResizeObserver(size).observe($('panel'));
+
+/* ---------- movimientos animados ---------- */
+const queue=[];let anim=null;
+function doMove(m,src='user',fast=false){queue.push({m,src,fast})}
+function startAnim(){const q=queue.shift(),n=C.NORM[q.m[0]],turns=q.m.endsWith('2')?2:q.m.endsWith("'")?-1:1;
+  pivot.quaternion.identity();const objs=[];
+  for(const b of bodies)if(b.userData.p[0]*n[0]+b.userData.p[1]*n[1]+b.userData.p[2]*n[2]===1)objs.push(b);
+  stickers.forEach((m,i)=>{const p=C.SLOTS[i].p;if(p[0]*n[0]+p[1]*n[1]+p[2]*n[2]===1)objs.push(m)});
+  for(const o of objs)pivot.attach(o);
+  anim={...q,axis:new THREE.Vector3(...n),angle:-turns*Math.PI/2,t:0,dur:q.fast?.07:(turns===2?.34:.22)};showArrow(null)}
+function stepAnim(dt){if(!anim){if(queue.length)startAnim();return}
+  anim.t+=dt;const k=Math.min(1,anim.t/anim.dur),e=k<.5?2*k*k:1-Math.pow(-2*k+2,2)/2;
+  pivot.quaternion.setFromAxisAngle(anim.axis,anim.angle*e);
+  if(k>=1){const a=anim;anim=null;state=C.apply(state,a.m);layout();moveDone(a.m,a.src)}}
+
+/* ---------- modos y guía ---------- */
+let mode='free',level=1,guideOn=false,plan=[],gi=0,mi=0,half=null,history=[];
+let done={};try{done=JSON.parse(localStorage.getItem('holo-rubik-done')||'{}')}catch(e){}
+function saveDone(){try{localStorage.setItem('holo-rubik-done',JSON.stringify(done))}catch(e){}}
+function targetStage(){return mode==='level'?level:7}
+function goalReached(){return mode==='level'?C.stageDone(state,level):C.currentStage(state)===8}
+function expected(){const g=plan[gi];return g?g.moves[mi]:null}
+function replan(){half=null;plan=[];gi=0;mi=0;
+  if(guideOn&&!goalReached()){try{plan=C.plan(state,targetStage())}catch(e){console.log(e);plan=[]}}
+  renderGuide()}
+function advance(){mi++;half=null;while(plan[gi]&&mi>=plan[gi].moves.length){gi++;mi=0}renderGuide()}
+
+function moveDone(m,src){
+  if(src==='scramble'){if(!queue.length&&!anim)replan();return}
+  if(src!=='undo')history.push(m);
+  if(goalReached()){showArrow(null);finishGoal();return}
+  if(!guideOn){renderGuide();return}
+  const ex=expected();
+  if(ex&&m===ex)advance();
+  else if(ex&&ex.endsWith('2')&&m[0]===ex[0]&&!m.endsWith('2')){
+    if(!half){half=m;renderGuide();toast('¡Bien! Una vez más igual')}else if(half===m)advance();else replan()}
+  else{replan();if(src==='user')toast('Recalculé la guía desde donde quedaste')}
+}
+function renderGuide(){
+  const st=C.currentStage(state),cur=Math.min(st,7),info=C.STAGES[cur-1];
+  const lbl=mode==='level'?`Nivel ${level} · ${C.STAGES[level-1].name}`:mode==='final'?'Reto final':'Modo libre';
+  $('title').textContent=lbl;
+  $('bHint').classList.toggle('on',guideOn);$('bHint').textContent=guideOn?'Ocultar guía':'Pista';
+  $('freeRow').classList.toggle('hide',mode==='level');
+  $('bAuto').disabled=!guideOn;
+  if(goalReached()){$('gStage').textContent=lbl;$('gTitle').textContent=mode==='level'?'Etapa completa':'¡Cubo armado!';$('gText').textContent=mode==='free'?'Toca Mezclar para empezar.':'';$('gNext').classList.add('hide');$('gSeq').innerHTML='';showArrow(null);return}
+  $('gStage').textContent=`Etapa ${cur} de 7 · ${info.name}`;
+  if(!guideOn){$('gTitle').textContent=info.name;$('gText').textContent=info.goal+' Toca «Pista» si te atascas.';$('gNext').classList.add('hide');$('gSeq').innerHTML='';showArrow(null);return}
+  const g=plan[gi];if(!g){$('gTitle').textContent=info.name;$('gText').textContent=info.goal;$('gNext').classList.add('hide');$('gSeq').innerHTML='';showArrow(null);return}
+  $('gTitle').textContent=g.title;$('gText').textContent=g.text;
+  const ex=g.moves[mi];$('gNext').classList.remove('hide');
+  $('gMove').textContent=ex;$('gMoveTxt').textContent=(half?'Otra vez: ':'')+C.moveText(ex);
+  $('gSeq').innerHTML=g.moves.map((m,i)=>`<span class="${i<mi?'done':i===mi?'cur':''}">${m}</span>`).join('');
+  if(!anim)showArrow(ex.endsWith('2')?ex[0]:ex);
+}
+function finishGoal(){
+  renderGuide();
+  if(mode==='level'){done[level]=1;saveDone();$('dTitle').textContent=`¡Nivel ${level} completado!`;
+    $('dText').textContent=level<7?`Ya dominas: ${C.STAGES[level-1].name}. Sigue con: ${C.STAGES[level].name}.`:'¡Armaste el cubo completo con el método para principiantes! Ahora prueba el reto final.';
+    $('dNext').textContent=level<7?'Siguiente nivel':'Ir al reto final'}
+  else{$('dTitle').textContent='¡Cubo armado!';$('dText').textContent=`Lo lograste en ${history.length} movimientos.`;$('dNext').textContent='Otro reto'}
+  setTimeout(()=>$('done').classList.remove('hide'),500)}
+
+function startMode(md,lv){mode=md;level=lv||1;queue.length=0;anim=null;history=[];$('done').classList.add('hide');$('levels').classList.add('hide');
+  if(md==='level'){state=C.levelStart(level);guideOn=true}
+  else if(md==='final'){state=C.applySeq(C.SOLVED,C.scramble());guideOn=false}
+  else{state=C.SOLVED.slice();guideOn=false}
+  layout();replan();size()}
+
+function buildLevels(){
+  const items=[['free','Modo libre','Gira como quieras'],...C.STAGES.map((s,i)=>['l'+(i+1),`Nivel ${i+1}: ${s.name}`,done[i+1]?'✓ completado':'']),['final','Reto final','Cubo mezclado, guía opcional']];
+  $('lvList').innerHTML=items.map(([id,t,sub])=>`<button data-id="${id}"><span>${t}</span><small>${sub}</small></button>`).join('');
+  $('lvList').querySelectorAll('button').forEach(b=>b.onclick=()=>{const id=b.dataset.id;if(id==='free')startMode('free');else if(id==='final')startMode('final');else startMode('level',+id.slice(1))})}
+
+/* ---------- botones ---------- */
+const pad=$('pad');pad.innerHTML=['U',"U'",'R',"R'",'F',"F'",'D',"D'",'L',"L'",'B',"B'"].map(m=>`<button data-m="${m}">${m}</button>`).join('');
+pad.querySelectorAll('button').forEach(b=>b.onclick=()=>doMove(b.dataset.m));
+$('bPad').onclick=()=>{pad.classList.toggle('hide');$('bPad').classList.toggle('on')};
+$('bHint').onclick=()=>{guideOn=!guideOn;replan()};
+$('bAuto').onclick=()=>{const ex=expected();if(!ex||anim||queue.length)return;doMove(half||ex,'user')};
+$('bUndo').onclick=()=>{if(anim||queue.length||!history.length)return;doMove(C.inverse(history.pop()),'undo')};
+$('bScr').onclick=()=>{if(anim||queue.length)return;history=[];for(const m of C.scramble(20))doMove(m,'scramble',true)};
+$('bReset').onclick=()=>{state=C.SOLVED.slice();history=[];layout();replan()};
+$('bView').onclick=()=>{view.tx=.5;view.ty=-.7};
+$('bLevels').onclick=()=>{buildLevels();$('levels').classList.remove('hide')};
+$('bMenu').onclick=()=>{location.href='../juegos/'};
+$('dNext').onclick=()=>{if(mode==='level'&&level<7)startMode('level',level+1);else startMode('final')};
+$('dAgain').onclick=()=>{if(mode==='level')startMode('level',level);else startMode(mode)};
+$('dLevels').onclick=()=>{$('done').classList.add('hide');buildLevels();$('levels').classList.remove('hide')};
+let toastT=0;function toast(t){$('toast').textContent=t;$('toast').style.opacity=1;clearTimeout(toastT);toastT=setTimeout(()=>$('toast').style.opacity=0,1800)}
+
+/* ---------- girar capas arrastrando ---------- */
+const ray=new THREE.Raycaster();
+function hitSlot(x,y){if(anim)return null;ray.setFromCamera(new THREE.Vector2(x/innerWidth*2-1,-(y/innerHeight)*2+1),cam);const h=ray.intersectObjects(stickers,false)[0];return h?h.object.userData.slot:null}
+function toPx(v){const p=v.clone().project(cam);return{x:(p.x+1)/2*innerWidth,y:(1-p.y)/2*innerHeight}}
+function dragToMove(slot,dv){const s=C.SLOTS[slot],hp=new THREE.Vector3(...s.p).addScaledVector(new THREE.Vector3(...s.n),.5);let best=null;
+  for(const a of[[1,0,0],[0,1,0],[0,0,1]]){if(a[0]*s.n[0]+a[1]*s.n[1]+a[2]*s.n[2])continue;
+    const t=new THREE.Vector3(...a).cross(hp),p0=toPx(cube.localToWorld(hp.clone())),p1=toPx(cube.localToWorld(hp.clone().addScaledVector(t,.3)));
+    const dx=p1.x-p0.x,dy=p1.y-p0.y,l=Math.hypot(dx,dy)*Math.hypot(dv.x,dv.y)||1,sc=(dx*dv.x+dy*dv.y)/l;
+    if(!best||Math.abs(sc)>Math.abs(best.sc))best={a,sc}}
+  const layer=best.a[0]*s.p[0]+best.a[1]*s.p[1]+best.a[2]*s.p[2];if(!layer){toast('Arrastra sobre una capa del borde, no la del medio');return null}
+  const face=FACE_OF[best.a.map(v=>v*layer).join(',')],rot=Math.sign(best.sc)*layer;return rot<0?face:face+"'"}
+let drag=null;
+function dragStart(src,p){drag={src,start:{...p},last:{...p},slot:hitSlot(p.x,p.y),used:false}}
+function dragMove(p){if(!drag)return;
+  if(drag.slot!=null){if(!drag.used){const dv={x:p.x-drag.start.x,y:p.y-drag.start.y};if(Math.hypot(dv.x,dv.y)>Math.max(26,innerWidth*.05)){drag.used=true;const m=dragToMove(drag.slot,dv);if(m)doMove(m)}}}
+  else{view.ty+=(p.x-drag.last.x)*.008;view.tx=Math.max(-1.3,Math.min(1.3,view.tx+(p.y-drag.last.y)*.008))}
+  drag.last={...p}}
+const gl=$('gl');
+gl.addEventListener('pointerdown',e=>dragStart('ptr',{x:e.clientX,y:e.clientY}));
+gl.addEventListener('pointermove',e=>{if(drag&&drag.src==='ptr')dragMove({x:e.clientX,y:e.clientY})});
+const endPtr=()=>{if(drag&&drag.src==='ptr')drag=null};gl.addEventListener('pointerup',endPtr);gl.addEventListener('pointercancel',endPtr);
+
+/* ---------- manos ---------- */
+const video=$('video');let lm=null,ready=false,hands=[],lastVT=-1;const pinchState={};let fistPrev=null;
+function toScreen(p){const vw=video.videoWidth||640,vh=video.videoHeight||480,W=innerWidth,H=innerHeight,k=Math.max(W/vw,H/vh);return{x:W-(p.x*vw*k-(vw*k-W)/2),y:p.y*vh*k-(vh*k-H)/2}}
+const dist=(a,b)=>Math.hypot(a.x-b.x,a.y-b.y);
+function readHands(res){const seen=new Set();hands=res.landmarks.map((l,i)=>{const k=res.handedness?.[i]?.[0]?.categoryName||String(i);seen.add(k);
+  const s=l.map(toScreen),hs=dist(s[0],s[9])||1,pr=dist(s[4],s[8])/hs,pinch=pinchState[k]?pr<.55:pr<.32;pinchState[k]=pinch;
+  const curl=[8,12,16,20].reduce((a,j)=>a+dist(s[j],s[0]),0)/4/hs;return{k,s,tip:s[8],pinch,pp:{x:(s[4].x+s[8].x)/2,y:(s[4].y+s[8].y)/2},fist:!pinch&&curl<1.25,c:s[9]}});
+  for(const k of Object.keys(pinchState))if(!seen.has(k))delete pinchState[k];
+  // pellizco: girar capa o vista
+  const ph=hands.find(h=>h.pinch);
+  if(drag&&drag.src!=='ptr'){const h=hands.find(q=>q.k===drag.src);if(h&&h.pinch)dragMove(h.pp);else drag=null}
+  else if(ph&&!drag)dragStart(ph.k,ph.pp);
+  // puño: girar vista
+  const f=hands.find(h=>h.fist);if(f&&!drag){if(fistPrev){view.ty+=(f.c.x-fistPrev.x)*.01;view.tx=Math.max(-1.3,Math.min(1.3,view.tx+(f.c.y-fistPrev.y)*.01))}fistPrev=f.c}else fistPrev=null}
+let dwEl=null,dwT=0;
+function dwell(dt){let el=null;const h=hands.find(q=>!q.pinch&&!q.fist);
+  if(h&&!drag){const e=document.elementFromPoint(h.tip.x,h.tip.y);el=e&&e.closest('button');if(el&&el.disabled)el=null}
+  if(el!==dwEl){if(dwEl)dwEl.style.setProperty('--p',0);dwEl=el;dwT=0}
+  if(el){dwT+=dt;el.style.setProperty('--p',Math.max(0,Math.min(1,dwT/.9)));if(dwT>=.9){el.click();dwT=-.8}}}
+function drawHands(){const W=innerWidth,H=innerHeight;octx.clearRect(0,0,W,H);
+  for(const h of hands){octx.strokeStyle='rgba(55,232,255,.35)';octx.lineWidth=1.5;octx.beginPath();
+    for(const {start,end} of HandLandmarker.HAND_CONNECTIONS){octx.moveTo(h.s[start].x,h.s[start].y);octx.lineTo(h.s[end].x,h.s[end].y)}octx.stroke();
+    octx.shadowColor='#37e8ff';octx.shadowBlur=12;octx.fillStyle=h.pinch?'#fff':'#37e8ff';octx.beginPath();octx.arc(h.pinch?h.pp.x:h.tip.x,h.pinch?h.pp.y:h.tip.y,h.pinch?10:7,0,7);octx.fill();octx.shadowBlur=0;
+    if(h.fist){octx.strokeStyle='#ffd23f';octx.lineWidth=3;octx.beginPath();octx.arc(h.c.x,h.c.y,26,0,7);octx.stroke()}}}
+
+/* ---------- bucle ---------- */
+let last=performance.now();
+function frame(t){requestAnimationFrame(frame);const dt=Math.min(.05,(t-last)/1000);last=t;
+  if(ready&&lm&&video.readyState>=2&&video.currentTime!==lastVT){lastVT=video.currentTime;try{readHands(lm.detectForVideo(video,t))}catch(e){console.log(e)}}
+  dwell(dt);stepAnim(dt);
+  view.x+=(view.tx-view.x)*.2;view.y+=(view.ty-view.y)*.2;cube.rotation.set(view.x,view.y,0);
+  if(arrow.visible&&arrowMove){const n=C.NORM[arrowMove[0]],pulse=.55+.45*Math.sin(t/180);arrow.children[0].material.opacity=.5+.5*pulse;
+    stickers.forEach((m,i)=>{const p=C.SLOTS[i].p;m.material.opacity=(p[0]*n[0]+p[1]*n[1]+p[2]*n[2]===1)?1:.55})}
+  else if(!anim)stickers.forEach(m=>m.material.opacity=1);
+  renderer.render(scene,cam);drawHands()}
+size();startMode('free');requestAnimationFrame(frame);
+
+/* ---------- cámara ---------- */
+function fail(m){$('err').textContent=m;$('err').classList.remove('hide');$('start').disabled=false;$('start').textContent='Reintentar'}
+function afterIntro(){$('intro').classList.add('hide');buildLevels();$('levels').classList.remove('hide')}
+$('start').onclick=async()=>{$('start').disabled=true;$('start').textContent='Cargando…';$('err').classList.add('hide');
+  if(!navigator.mediaDevices?.getUserMedia){fail('Este navegador no deja usar la cámara aquí. Abre la página desde https:// en Chrome o Safari.');return}
+  try{const st=await navigator.mediaDevices.getUserMedia({video:{facingMode:'user',width:{ideal:640},height:{ideal:480}},audio:false});video.srcObject=st;await video.play()}catch(e){fail('No pude abrir la cámara ('+e.name+'). Revisa el permiso.');return}
+  try{const fs=await FilesetResolver.forVisionTasks(WASM);const o=d=>({baseOptions:{modelAssetPath:MODEL,delegate:d},runningMode:'VIDEO',numHands:2});
+    try{lm=await HandLandmarker.createFromOptions(fs,o('GPU'))}catch(e){lm=await HandLandmarker.createFromOptions(fs,o('CPU'))}}catch(e){fail('No pude cargar el modelo de manos. Revisa tu conexión.');return}
+  ready=true;afterIntro()};
+$('touch').onclick=()=>{video.classList.add('hide');afterIntro()};
+}
+</script>
+</body>
+</html>
